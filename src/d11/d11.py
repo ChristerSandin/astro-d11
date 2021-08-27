@@ -83,6 +83,125 @@ def d11_spec_sec(i_0, i_1, mask, pos=True):
 def d11(filename, x, y, apr, cwidth, ofilename='DEF',
         offset=5, wave=None, spec=None, telluric=None, twidth=3.0,
         commentstelluric=None, overwrite=False, verbose=0):
+    """astro-d11: astronomical spectrum datacube continuum subtraction
+    filter
+
+    The filter works as follows.
+
+    A datacube with astronomical spectra is assumed to be provided in a
+    file that is saved in the FITS format. Where two axes are spatial
+    and a third is spectral.
+
+    The user specifies a quadratic region where there is little
+    disturbance and few features; this is done using the first two
+    arguments (x and y [pixel] coordinates) and the half-side (apr, also
+    a pixel value). The flux in the region is summed up to create a
+    reference spectrum using all layers (pixels on the wavelength axis)
+    in the datacube.
+
+    A new datacube is constructed layer by layer, where a continuum
+    image is created for each layer individually based on two regions
+    offset (--offset) towards lower and higher pixels of the current
+    layer. The total width of the continuum regions is set using the
+    fourth argument (cwidth, the width is specified in Angstrom). The
+    continuum image is at first normalized (corrected) with the
+    corresponding continuum regions of the reference spectrum.
+    Thereafter, the normalized continuum image is subtracted from the
+    current layer image.
+
+    Creating the continuum image and continuum reference spectrum for
+    each layer, the two continuum regions are offset towards either
+    lower or higher pixels until no telluric line falls within the
+    respective region. Telluric line wavelengths are read from a
+    plain-text file (--telluric) that provides a wavelength value per
+    line. The full width of any individual telluric line region can be
+    set (--twidth).
+
+    The filtered image is written to a file, adding a set of header
+    keywords that indicate waht argument values were used ("d11_x",
+    "d11_y", "d11_apr", and "d11_cwid") for (x, y, apr, cwidth). The
+    output filename can be set explicitly (using --ofilename), but
+    otherwise the input filename is used with the added suffix "_d11".
+
+    The program is used with the following keywords and options:
+
+    d11.py <file> x y apr cwidth [-d] [-t <file>] [-q <value>] \
+        [-u <char>] [-o <file>] [-w] [-v <int>]
+
+    <file>:
+      The name of the datacube file. The file needs to be stored using
+      the FITS format. An attempt is made at locating the dispersion
+      axis in the datacube using the CTYPEx header keywords (x is an
+      integer in the range 1-3), which needs to be set to either AWAV
+      or WAVE.
+
+    x:
+      The x-coordinate of the region that is used to create a reference
+      spectrum. The value is specified in pixel units. There is no
+      default as this value has to be chosen by identifying a region in
+      the datacube where there is little change.
+
+    y:
+      The y-coordinate of the region that is used to create a reference
+      spectrum. The value is specified in pixel units. There is no
+      default as this value has to be chosen by identifying a region in
+      the datacube where there is little change.
+
+    apr:
+      The reference spectrum region half-width. The value is specified
+      in pixel units. There is no default as this value has to be chosen
+      by identifying a region in the datacube where there is little
+      change.
+
+    cwidth:
+      The full (band)width of the continuum region that includes both
+      the region towards lower and higher pixels away from the current
+      layer on the dispersion axis. The value is specified in wavelength
+      units (Angstrom). There is no default as this value has to be
+      chosen depending on the data.
+
+    [-d] or [--offset]:
+      The initial offset towards lower and higher pixels when defining
+      the continuum image is set using this keyword. The unit is pixels,
+      and the default value is 5 pixels.
+
+    [-t] or [--telluric]:
+      The name of a plain-text file that lists the wavelength of
+      telluric lines that should be excluded in the calculation of the
+      continuum regions. The wavelength unit is Angstrom. The default
+      value is: "data/telluric_lines_hires.dat".
+
+    [-q] or [--twidth]:
+      The bandwidth of bandpasses to ignore centered on telluric lines.
+      The value is specified in wavelength units (Angstrom). The default
+      value is 3.0 Å.
+
+    [-u] or [--commentstelluric]:
+      Specify a character that identifies lines with comments in the
+      telluric line-list file. The default value is "#".
+
+    [-o] or [--ofilename]:
+      The name of the resulting filtered file is usually the same as the
+      input file, with the added suffix "_d11". Use this keyword to
+      provide an own filename.
+
+    [-w] or [--overwrite]:
+      Any existing file with the same name as the output file will not
+      be overwritten unless this keyword is used to overwrite the file.
+
+    [-v] or [--verbose]:
+      An integer that specifies the verbosity of the filter processing.
+      The default is to show no information (0). Set the verbosity to
+      1 (some information) or 2 (all information).
+
+    [-h] or [--help]:
+      Show this information and exit.
+
+
+    Here is an *example* of how this tool is launched from the shell or
+    the console:
+    $ d11.py -o datacube_d11.fits -v 1 datacube.fits 12.0 25.0 50.0 20.0
+    """
 
     import os
     import sys
@@ -505,10 +624,7 @@ if __name__ == "__main__":
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
  
     parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
-                            description="""
-Here is an example of how this tool is launched from the shell or the console
-  $ d11.py -o datacube_d11.fits -v 1 datacube.fits 12.0 25.0 2.0 3.0
-       """)
+                            description=___doc___)
 
     ###########################################################################
     # Parsing command-line arguments and options:
@@ -522,6 +638,9 @@ Here is an example of how this tool is launched from the shell or the console
     parser.add_argument("cwidth", help="Bandwidth of continuum band for subt" \
                         "raction.", type=float)
 
+    parser.add_argument("-d", "--offset", action="store", type=int, \
+                        help="Specify a name of a plain-text file with tellu" \
+                        "ric lines.")
     parser.add_argument("-t", "--telluric", action="store", type=str, \
                         help="Specify a name of a plain-text file with tellu" \
                         "ric lines.")
@@ -539,6 +658,11 @@ Here is an example of how this tool is launched from the shell or the console
 
     args = parser.parse_args()
 
+    if args.offset is not None:
+        offset = args.offset
+    else:
+        offset = 5
+
     if args.twidth is not None:
         twidth = args.twidth
     else:
@@ -550,7 +674,7 @@ Here is an example of how this tool is launched from the shell or the console
         verbose = 0
 
     d11(args.filename, args.x, args.y, args.apr, args.cwidth,
-        telluric=args.telluric, twidth=twidth,
+        offset=offset, telluric=args.telluric, twidth=twidth,
         commentstelluric=args.commentstelluric,
         ofilename=args.ofilename, overwrite=args.overwrite,
         verbose=verbose)
