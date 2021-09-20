@@ -39,50 +39,376 @@
 ## ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 ## POSSIBILITY OF SUCH DAMAGE.
 
-def d11_spec_sec(i_0, i_1, mask, pos=True):
+import numpy as np
+import logging
 
-    N = len(mask)
+def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
+
+    N = len(tmask)
     i_str = ""
+    i_type = 0
+    use_emask = False
+    if emask is not None: use_emask = True
 
     # Step over masked pixels:
 
     if pos:
-        if i_0 > N: i_0 = N
+        if i_0 > N - 1: i_0 = N - 1
         if i_1 > N: i_1 = N
-        if i_0 == i_1:
-            return (i_0, i_1, "")
+        if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
 
-        while max(mask[i_0 : i_1]) > 0:
-            i_str = str(mask[i_0]) + " (red)"
-            i_0 = i_0 + 1
-            i_1 = i_1 + 1
+        if use_emask:
+            mtmask = max(tmask[i_0 : i_1])
+            memask = max(emask[i_0 : i_1])
 
-            if i_0 > N: i_0 = N
-            if i_1 > N: i_1 = N
-            if i_0 == i_1:
-                return (i_0, i_1, "")
+            while mtmask > 0 or memask > 0:
+                it__str = ""
+                if mtmask > 0: it_str = str(tmask[i_0]) + " (red)"
+                ie_str = ""
+                if memask > 0: ie_str = "er:" + str(memask) + "; "
+                i_str = ie_str + it_str
+
+                i_type = 0
+                if mtmask > 0.0: i_type = 1
+                if memask > 0: i_type += 2
+                i_0 = i_0 + 1
+                i_1 = i_1 + 1
+
+                if i_0 > N - 1: i_0 = N - 1
+                if i_1 > N: i_1 = N
+                if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
+        else:
+            while max(tmask[i_0 : i_1]) > 0:
+                i_str = str(tmask[i_0]) + " (red)"
+                i_type = 1
+                i_0 = i_0 + 1
+                i_1 = i_1 + 1
+
+                if i_0 > N - 1: i_0 = N - 1
+                if i_1 > N: i_1 = N
+                if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
     else:
         if i_0 < 0: i_0 = 0
-        if i_1 < 0: i_1 = 0
-        if i_0 == i_1:
-            return (i_0, i_1, "")
+        if i_1 < 1: i_1 = 1
+        if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
 
-        while max(mask[i_0 : i_1]) > 0:
-            i_str = str(mask[i_1 - 1]) + " (blue)"
-            i_0 = i_0 - 1
-            i_1 = i_1 - 1
+        if use_emask:
+            mtmask = max(tmask[i_0 : i_1])
+            memask = max(emask[i_0 : i_1])
 
-            if i_0 < 0: i_0 = 0
-            if i_1 < 0: i_1 = 0
-            if i_0 == i_1:
-                return (i_0, i_1, "")
+            while mtmask > 0 or memask > 0:
+                it__str = ""
+                if mtmask > 0: it_str = str(tmask[i_1]) + " (blue)"
+                ie_str = ""
+                if memask > 0: ie_str = "eb:" + str(memask) + "; "
+                i_str = ie_str + it_str
 
-    return (i_0, i_1, i_str)
+                i_type = 0
+                if mtmask > 0.0: i_type = 1
+                if memask > 0: i_type += 2
+                i_0 = i_0 - 1
+                i_1 = i_1 - 1
+
+                if i_0 < 0: i_0 = 0
+                if i_1 < 1: i_1 = 1
+                if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
+        else:
+            while max(tmask[i_0 : i_1]) > 0:
+                i_str = str(tmask[i_1 - 1]) + " (blue)"
+                i_type = 1
+                i_0 = i_0 - 1
+                i_1 = i_1 - 1
+
+                if i_0 < 0: i_0 = 0
+                if i_1 < 1: i_1 = 1
+                if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
+
+    return (i_0, i_1, i_str, i_type)
 
 
-def d11(filename, x, y, apr, cwidth, ofilename='DEF',
-        offset=5, wave=None, spec=None, telluric=None, twidth=3.0,
-        commentstelluric=None, overwrite=False, verbose=0):
+def d11_mpfit_f(p, fjac=None, x=None, y=None, dy=None, coff=None,
+                n_tied=None, funceval=False):
+    # Parameter values are passed in "p"
+    # If fjac==None then partial derivatives should not be
+    # computed.  It will always be None if MPFIT is called with default
+    # flag.
+
+    f = p[0] + p[1] * x
+
+    p_3 = 1e-20
+    if p[3] > p_3: p_3 = p[3]
+
+    u = ((x - p[2])/p_3)**2
+    mask = np.zeros(x.size, dtype=int)
+    mask[u < smax ** 2] = 1
+    f += p[4] / (np.sqrt(2.0 * np.pi) * p[3]) * mask * np.exp(- 0.5 * u * mask)
+    del mask
+
+    # Add the tied lines.
+    for i in range(0, n_tied):
+        ii = 5 + i
+        u = ((x - (p[0]+coff[i]))/p_3)**2
+        mask = np.zeros(x.size, dtype=int)
+        mask[u < smax ** 2] = 1
+        f += p[ii] / (np.sqrt(2.0 * np.pi) * p[3]) * mask \
+            * np.exp(- 0.5 * u * mask)
+        del mask
+
+    # Non-negative status value means MPFIT should continue, negative means
+    # stop the calculation.
+    status = 0
+    if funceval:
+        return (f)
+    else:
+        return (status, (y-f)/err)
+
+
+def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
+              xstr="", verbose=None, error=0, debug=False, contall=False):
+
+    ok_fit = 0
+
+    # Fit the data with a Gaussian.
+
+    norm = sum(y) / y.size
+    y /= norm
+
+    n_fits = 2 + 3
+    n_tied = 0 if w_too is None else w_too.size
+    if n_tied > 0: n_fits += n_tied
+
+
+    # Configure the fit.
+
+    parinfo = [{'value':0., 'fixed':0, 'limited':[0, 0], 'limits':[0., 0.]}
+	       for i in range(n_fits)]
+
+    # line center.
+    parinfo[2]['value'] = w_init
+    parinfo[2]['limited'] = [1, 1]
+    parinfo[2]['limits'] = w_init + [- dwl, dwl] / cdelt
+
+    # sigma.
+    sigma_min = 0.8 * 2.0 / np.sqrt(8.0 * np.log(2.0))
+    sigma_max = 1.2 * 2.0 / np.sqrt(8.0 * np.log(2.0))
+    parinfo[3]['value'] = 2.0 / np.sqrt(8.0 * np.log(2.0))
+    parinfo[3]['limited'] = [1, 1]
+    parinfo[3]['limits'] = [sigma_min, sigma_max]
+
+    # intensity.
+    parinfo[4]['value'] = 1e3
+    parinfo[4]['limited'] = [1, 0]
+
+    # Intensities of additional lines.
+    if n_tied > 0:
+        coff = np.zeros(n_tied)
+        for i in range(0, n_tied):
+            ii = 5 + i
+
+            # line center.
+            coff[i] = w_too[i] - w_init
+
+            # intensity.
+            parinfo[ii]['value'] = 1e3
+            parinfo[ii]['limited'] = [1, 0]
+    else:
+        coff = np.zeros(1)
+
+    p0 = np.zeros(n_fits)
+    for i in range(0, n_fits): p0[i] = parinfo[i]['value']
+
+    dy = np.sqrt(y)
+    fctargs = {'x':x, 'y':y, 'dy':dy, 'coff':coff, 'n_tied':n_tied}
+
+    # Perform the fit.
+    quiet = 1 if verbose < 4 else 0
+    m = mpfit('d11_mpfit_f', p0, functkw=fctargs, parinfo=parinfo, \
+                maxiter=100, quiet=quiet)
+
+    y *= norm
+    dy *= norm
+    m.params[0 : 2] *= norm  # Constant offset and slope
+    m.params[4 :] *= norm  # Intensities
+
+    ## From the MPFIT documentation:
+    #   *If* you can assume that the true reduced chi-squared value is
+    #   unity - meaning that the fit is implicitly assumed to be of good
+    #   quality - then the estimated parameter uncertainties can be
+    #   computed by scaling PERROR by the measured chi-squared value.
+    #   sigpar *= sqrt(chisq / dof)
+
+    yfit = d11_mpfit_f(m.params, x=x, y=y, dy=dy, \
+                       coff=coff, n_tied=n_tied, funceval=True)
+
+    # Need to determine if the fit is good...this could be improved
+    ok_fit = ~np.isnan(m.chisq) and m.nfev > 1 and m.status > 0 and \
+        m.params[3] > sigma_min and \
+        m.params[3] < sigma_max and m.params[4] > 0.0
+
+
+    # Debugging: plot diagnostic properties.
+
+    if debug and not contall:
+        pass
+        # Could include this...or not
+
+    return (m.params[2])
+
+
+def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
+               mask=None, emask=None, inmsg="", nwidth=1, dwidth=1,
+               verbose=0, error=0, debug=False):
+
+    # Calculate the contribution to the flux on the feature blue side.
+
+    sb_0 = i - (offset+dwave)
+    sb_1 = i - offset + 1
+    (sb_0, sb_1, sb_str, sb_type) = d11_spec_sec(sb_0, sb_1, mask,
+                                                 emask=emask, pos=False)
+
+    nb = sb_1 - sb_0 if sb_1 > sb_0 else 0
+    if nb > 0: I_blue = spec[sb_0 : sb_1].sum()
+
+
+    # Calculate the contribution to the flux on the feature red side.
+
+    sr_0 = i + offset
+    sr_1 = i + (offset+dwave) + 1
+
+    (sr_0, sr_1, sr_str, sr_type) = d11_spec_sec(sr_0, sr_1, mask, emask=emask)
+
+    nr = sr_1 - sr_0 if sr_1 > sr_0 else 0
+    if nr > 0: I_red = spec[sr_0 : sr_1].sum()
+
+
+    # Sum up all flux in the blue and red bands around the feature.
+
+    if ix is None and iy is None:
+
+        if axis_s == 1:
+            if nb > 0: img_blue = np.sum(data[:, :, sb_0 : sb_1], axis=2)
+            if nr > 0: img_red  = np.sum(data[:, :, sr_0 : sr_1], axis=2)
+            img_i = data[:, :, i]
+        elif axis_s == 2:
+            if nb > 0: img_blue = np.sum(data[:, sb_0 : sb_1, :], axis=1)
+            if nr > 0: img_red  = np.sum(data[:, sr_0 : sr_1, :], axis=1)
+            img_i = data[:, i, :]
+        else:
+            if nb > 0: img_blue = np.sum(data[sb_0 : sb_1, :, :], axis=0)
+            if nr > 0: img_red  = np.sum(data[sr_0 : sr_1, :, :], axis=0)
+            img_i = data[i, :, :]
+
+    else:
+
+        if axis_s == 1:
+            if nb > 0: img_blue = np.sum(data[iy, ix, sb_0 : sb_1], axis=2)
+            if nr > 0: img_red  = np.sum(data[iy, ix, sr_0 : sr_1], axis=2)
+            img_i = data[iy, ix, i]
+        elif axis_s == 2:
+            if nb > 0: img_blue = np.sum(data[iy, sb_0 : sb_1, ix], axis=1)
+            if nr > 0: img_red  = np.sum(data[iy, sr_0 : sr_1, ix], axis=1)
+            img_i = data[iy, ix, :]
+        else:
+            if nb > 0: img_blue = np.sum(data[sb_0 : sb_1, iy, ix], axis=0)
+            if nr > 0: img_red  = np.sum(data[sr_0 : sr_1, iy, ix], axis=0)
+            img_i = data[i, iy, ix]
+
+
+    # Correct the layer i flux by subtracting blue and red contrib.
+
+    if nb == 0 and nr == 0:
+
+        img = img_i  # No correction possible
+        msg1 = "not corrected."
+        msg2 = "red band: -, blue band: -."
+        msg3 = ""
+
+    elif nb == 0:
+
+        if np.isnan(img_red).all():
+            img = img_i
+        else:
+            corr_fac = spec[i]*nr/I_red
+            img = img_i - corr_fac*nr/img_red
+        msg1 = "corrected using red band."
+        msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
+            "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
+            " [px] (n = {5:{dwidth}})".format("-", "-", 0, \
+                                              sr_0 + 1, sr_1, sr_1 - sr_0, \
+                                              width=nwidth, dwidth=dwidth)
+        msg3 = "."
+        if sr_str != "":
+            msg3 = " :: Line in bandpass: {0}.".format(sr_str)
+            if sr_type & 1 == 1: msg3 += " {tl.}"
+            if sr_type & 2 == 2: msg3 += " {em.}"
+            msg3 += "."
+
+    elif nr == 0:
+
+        if np.isnan(img_blue).all():
+            img = img_i
+        else:
+            corr_fac = spec[i]*nb/I_blue
+            img = img_i - corr_fac*nb/img_blue
+        msg1 = "corrected using blue band."
+        msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
+            "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
+            " [px] (n = {5:{dwidth}})".format(sb_0 + 1, sb_1, sb_1 - sb_0, \
+                                              "-", "-", 0, \
+                                              width=nwidth, dwidth=dwidth)
+        msg3 = "."
+        if sb_str != "":
+            msg3 = " :: Line in bandpass: {0}.".format(sb_str)
+            if sb_type & 1 == 1: msg3 += " {tl.}"
+            if sb_type & 2 == 2: msg3 += " {em.}"
+            msg3 += "."
+
+    else:
+
+        corr_fac = spec[i]/(I_blue/nb + I_red/nr)
+        img = img_i - corr_fac*(img_blue/nb + img_red/nr)
+        msg1 = "corrected using blue and red bands."
+        msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
+            "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
+            " [px] (n = {5:{dwidth}})".format(sb_0 + 1, sb_1, sb_1 - sb_0, \
+                                              sr_0 + 1, sr_1, sr_1 - sr_0, \
+                                              width=nwidth, dwidth=dwidth)
+        msg3 = ""
+        msgp = ""
+        if sb_str != "" or sr_str != "": msg3 = " :: Line in bandpass: "
+
+        msg3b = ""
+        if sb_str != "":
+            msg3b = "{0}".format(sb_str)
+            if sb_type & 1 == 1: msg3b += " {tl.}"
+            if sb_type & 2 == 2: msg3b += " {em.}"
+            msgp = "."
+
+        msg3r = ""
+        if sr_str != "":
+            if msg3b != "": msg3b = msg3b + ", "
+            msg3r = "{0}".format(sr_str)
+            if sr_type & 1 == 1: msg3r += " {tl.}"
+            if sr_type & 2 == 2: msg3r += " {em.}"
+            msgp = "."
+
+        msg3 = msg3 + msg3b + msg3r + msgp
+
+    if verbose >= 1:
+        if verbose == 1:
+            log_str = inmsg + msg1
+        else:
+            log_str = inmsg + msg2 + msg3
+        print(log_str)
+        logging.info(log_str)
+
+    return img
+
+
+def d11(filename, x, y, apr, cwidth, ofilename=None,
+        offset=5, wave=None, spec=None, emissionlines=None, dwl=1.0, vel_z=0.0,
+        telluriclines=None, twidth=3.0,
+        commentslines=None, overwrite=False, verbose=0, debug=False):
     """astro-d11: astronomical spectrum datacube continuum subtraction
     filter
 
@@ -113,7 +439,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
     each layer, the two continuum regions are offset towards either
     lower or higher pixels until no telluric line falls within the
     respective region. Telluric line wavelengths are read from a
-    plain-text file (--telluric) that provides a wavelength value per
+    plain-text file (--telluriclines) that provides a wavelength value per
     line. The full width of any individual telluric line region can be
     set (--twidth).
 
@@ -125,7 +451,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
 
     The program is used with the following keywords and options:
 
-    d11.py <file> x y apr cwidth [-d] [-t <file>] [-q <value>] \
+    d11.py <file> x y apr cwidth [-f] [-t <file>] [-q <value>] \
         [-u <char>] [-o <file>] [-w] [-v <int>]
 
     <file>:
@@ -160,14 +486,34 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
       units (Angstrom). There is no default as this value has to be
       chosen depending on the data.
 
-    [-d] or [--offset]:
+    [-f] or [--offset]:
       The initial offset towards lower and higher pixels when defining
       the continuum image is set using this keyword. The unit is pixels,
       and the default value is 5 pixels.
 
-    [-t] or [--telluric]:
-      The name of a plain-text file that lists the wavelength of
-      telluric lines that should be excluded in the calculation of the
+    [-e] or [--emissionlines]:
+      The name of a plain-text file that lists wavelengths of
+      possibly redshifted emission lines that should be excluded in the
+      calculation of the continuum regions. Red and blue shifted
+      emission lines are identified by fitting a Gaussian profile to a
+      potentially existing emission line, assuming a redshift set using
+      the parameter --vel_z while allowing an offset from that value
+      (--dwl). The wavelength unit is Angstrom. The default value is:
+      "emission_lines-ground_based-noFe.dat".
+
+    [-d] or [--dwl]:
+      A value that defines a maximum allowed deviation from the provided
+      center wavelengths of emission lines. The unit is Ångström [Å].
+
+    [-z] or [--vel_z]:
+      A scalar value that specifies the redshift of all regular emission
+      lines as a velocity. The unit assumed is km/s. The redshift is
+      recovered using the equation (where c is the light speed):
+        z = sqrt((1 + vel_z / c) / (1 - vel_z / c)) - 1
+
+    [-t] or [--telluriclines]:
+      The name of a plain-text file that lists wavelengths of telluric
+      lines that should be excluded in the calculation of the
       continuum regions. The wavelength unit is Angstrom. The default
       value is: "data/telluric_lines_hires.dat".
 
@@ -176,7 +522,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
       The value is specified in wavelength units (Angstrom). The default
       value is 3.0 Å.
 
-    [-u] or [--commentstelluric]:
+    [-u] or [--commentslines]:
       Specify a character that identifies lines with comments in the
       telluric line-list file. The default value is "#".
 
@@ -208,10 +554,8 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
     from pathlib import Path
     import inspect
     import math
-    import numpy as np
     from astropy.io import fits
     import time
-    import logging
 
     screxe = os.path.basename(__file__)
     screxe = screxe[0:screxe.find(".")] + ": "
@@ -229,7 +573,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
             "-type file with a datacube."
         raise RuntimeError(msg)
 
-    if ofilename == "DEF" or ofilename is None:
+    if ofilename is None:
         if filename.endswith(".fits"):
             idx = filename.rfind(".")
             ofilename = filename[0:idx] + "_d11.fits"
@@ -247,35 +591,69 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
         print(screxe + "  ofilename=\"" + ofilename + "\"")
         raise RuntimeError(msg)
 
-    use_telluric = False
-    if telluric is not None and isinstance(telluric, str):
-        if not os.path.isfile(telluric):
-            msg = screxe + "<telluric> must contain the name of an existing " \
-                "plain-text file listing telluric lines (Angstrom)."
+    comments = "#"
+    if commentslines is not None:
+        if not isinstance(commentslines, str):
+            msg = screxe + "<commentslines> must be a one-character string; " \
+                + str(type(commentslines)) + "."
+            raise RuntimeError(msg)
+        if len(commentslines) != 1:
+            msg = screxe + "<commentslines> must be a one-character string; " \
+                + str(type(commentslines)) + "."
+            raise RuntimeError(msg)
+        comments = commentslines
+
+    use_emissionlines = False
+    if emissionlines is not None and isinstance(emissionlines, str):
+        if not os.path.isfile(emissionlines):
+            msg = screxe + "<emissionlines> must contain the name of an exis" \
+                "ting plain-text file listing emission lines (Angstrom)."
             raise RuntimeError(msg)
 
-        use_telluric = True
+        use_emissionlines = True
     else:
         exefile = inspect.getabsfile(inspect.currentframe())
         path = Path(exefile)
         path = path.parent.parent.parent.absolute()
-        telluric = os.path.join(path, "data", "telluric_lines_hires.dat")
-        use_telluric = True
+        emissionlines = os.path.join(path, "data",
+                                     "emission_lines-ground_based-noFe.dat")
+        use_emissionlines = True
 
-    comments = "#"
-    if commentstelluric is not None:
-        if not isinstance(commentstelluric, str):
-            msg = screxe + "<commentstelluric> must be a one-character s" \
-                "tring; " + str(type(commentstelluric)) + "."
-            raise RuntimeError(msg)
-        if len(commentstelluric) != 1:
-            msg = screxe + "<commentstelluric> must be a one-character s" \
-                "tring; " + str(type(commentstelluric)) + "."
-            raise RuntimeError(msg)
-        comments = commentstelluric
+    use_emissionlines = False
 
-    if use_telluric:
-        tlines = np.loadtxt(telluric, comments=comments)
+    if use_emissionlines:
+        elines = np.loadtxt(emissionlines, comments=comments)
+
+        if not isinstance(dwl, float):
+            msg = screxe + "<dwl> must be set to a decimal value (Angstrom)."
+            raise RuntimeError(msg)
+
+        if not isinstance(vel_z, float):
+            msg = screxe + "<vel_z> must be set to a decimal value (km/s)."
+            raise RuntimeError(msg)
+
+        clight = 2.99792458e10
+        vel_z *= 1e5  # km/s => cm/s
+        z = np.sqrt((1.0 + vel_z / clight) / (1.0 - vel_z / clight)) - 1.0
+
+
+    use_telluriclines = False
+    if telluriclines is not None and isinstance(telluriclines, str):
+        if not os.path.isfile(telluriclines):
+            msg = screxe + "<telluriclines> must contain the name of an exis" \
+                "ting plain-text file listing telluric lines (Angstrom)."
+            raise RuntimeError(msg)
+
+        use_telluriclines = True
+    else:
+        exefile = inspect.getabsfile(inspect.currentframe())
+        path = Path(exefile)
+        path = path.parent.parent.parent.absolute()
+        telluriclines = os.path.join(path, "data", "telluric_lines_hires.dat")
+        use_telluriclines = True
+
+    if use_telluriclines:
+        tlines = np.loadtxt(telluriclines, comments=comments)
 
 
     if verbose >= 1:
@@ -290,8 +668,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
             raise RuntimeError(msg)
         if os.path.exists(ofilename) and overwrite: os.remove(logfile)
 
-        logging.basicConfig(filename=logfile,
-                            format="%(asctime)s %(message)s",
+        logging.basicConfig(filename=logfile, format="%(asctime)s %(message)s",
                             level=logging.DEBUG)
         log_str = [screxe + "Apply a differential emission line filter (DELF" \
                    ") on an astronomical datacube.", \
@@ -303,12 +680,20 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
                    screxe + "  cwidth = " + str(cwidth), \
                    screxe + "  twidth = " + str(twidth), \
                    screxe + "  offset = " + str(offset)]
-        if use_telluric:
-            log_str = [log_str, screxe + "  commentstelluric = \"" +
-                       comments + "\"", \
-                       screxe + "  telluric = \"" + telluric + "\""]
-        log_str = [log_str, screxe + "  ofilename = \"" + ofilename + "\""]
-        for log_str_i in log_str: logging.info(log_str_i)
+        if use_telluriclines or use_emissionlines:
+            log_str.append(screxe + "  commentslines = \"" + comments + "\"")
+        if use_emissionlines:
+            log_str = [log_str, \
+                       screxe + "  emissionlines = \"" + emissionlines + "\"", \
+                       screxe + "  dwl = " + str(dwl), \
+                       screxe + "  vel_z = " + str(vel_z)]
+        if use_telluriclines:
+            log_str.append(screxe + \
+                           "  telluriclines = \"" + telluriclines + "\"")
+        log_str.append(screxe + "  ofilename = \"" + ofilename + "\"")
+        for log_str_i in log_str:
+            print(log_str_i)
+            logging.info(log_str_i)
 
     try:
         with fits.open(filename) as hdul:
@@ -364,6 +749,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
         if verbose >= 2:
             logging.info(screxe + "NAXIS" + axis_ss + "=" + str(nwave) +
                          ", CRVAL" + axis_ss + "=" + str(crval) +
+                         ", CDELT" + axis_ss + "=" + str(cdisp) +
                          ", CRPIX" + axis_ss + "=" + str(crpix))
 
         xsize = hdr1["naxis" + str(axis_x)]
@@ -378,10 +764,10 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
         dwave = round(0.5*cwidth/cdisp)
 
 
-        # Create a telluric line mask.
+        # Create a line mask that optionally accounts for telluric lines.
 
         mask = np.zeros(nwave)
-        if use_telluric:
+        if use_telluriclines:
             twave = round(0.5*twidth/cdisp)
             for wave_tell in tlines:
                 w_i = (wave_tell-crval)/cdisp - 1.0 + crpix
@@ -443,6 +829,160 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
             print(log_str)
             logging.info(log_str)
 
+
+        #========================================------------------------------
+        # Optionally, create a line mask that accounts for redshifted emission
+        # lines.
+
+        contall = 0
+        if use_emissionlines:
+
+            x = np.arange(nwave, dtype=float)
+            e_mask = np.zeros(nwave, xsize, ysize)
+
+            twave = round(0.5*twidth/cdisp)
+
+            # Loop over all spatial elements.
+            for ixy in range(0, xsize * ysize):
+
+                ix = ixy % xsize
+                iy = ixy // xsize
+
+                if axis_s == 1:
+                    xy_spec = data[iy, ix, :]
+                elif axis_s == 2:
+                    xy_spec = data[iy, :, ix]
+                else:
+                    xy_spec = data[:, iy, ix]
+
+
+                # Check for NaN-element-only spectra and skip them.
+
+                count = np.argwhere(~np.isnan(xy_spec)).size/2
+
+                if count == 0:
+                    logstr = screxe + "Spectrum [" + str(ix + 1) + ", " + \
+                        str(iy + 1) + "] / [" + str(xsize) + ", " + \
+                        str(ysize) + "] :: There were no finite pixels in the" \
+                        " spectrum - skip."
+                    print(log_str)
+                    logging.info(logstr)
+
+                    continue
+
+
+                # Loop over all emission lines.
+
+                for i in range(0, len(elines)):
+
+                    # Initially, use a constant redshift across the field.
+
+                    w_init = (elines[i]*(1.0 + z) - crval)/cdisp - 1.0 + crpix
+
+                    if w_init < - 2.0 or w_init > nwave + 2.0: continue
+
+
+                    # Locate the possiby redshifted emission line.
+
+                    # Collect all emission lines in the interval:.
+                    x__low = math.floor(w_init - 2*twidth)
+                    if x__low < (- 2): x__low = - 2
+                    if x__low > nwave + 1: x__low = nwave + 1
+
+                    x__high = math.ceil(w_init + 2*twidth) + 1
+                    if x__high < (- 1): x__high = - 1
+                    if x__high > nwave + 2: x__high = nwave + 2
+
+                    w_init_oo = (emission_lines * (1.0 + z) - crval)/cdisp \
+                                                                - 1.0 + crpix
+                    tmp = np.where(int(w_init_oo) >= x_low and \
+                                   int(w_init_oo) <= x_high and \
+                                   w_init_oo != w_init)
+                    if np.array(tmp).size > 0:
+                        e_count = np.array(tmp).size
+                        w_too = tmp
+                        del tmp
+                    else:
+                        e_count = 0
+
+
+                    # The elements next to the emission line must be finite.
+                    xi_low = math.floor(w_init - 2)
+                    if xi_low < 0: xi_low = 0
+                    if xi_low > nwave - 1: xi_low = nwave - 1
+
+                    xi_high = math.ceil(w_init + 2) + 1
+                    if xi_high < 1: xi_high = 1
+                    if xi_high > nwave: xi_high = nwave
+
+                    x__low = math.floor(w_init - 2*twidth - 2)
+                    if x__low < 0: x__low = 0
+                    if x__low > nwave - 1: x__low = nwave - 1
+
+                    x__high = math.ceil(w_init + 2*twidth + 2) + 1
+                    if x__high < 1: x__high = 1
+                    if x__high > nwave: x__high = nwave
+
+                    if x_low + 1 >= x_high: continue
+
+                    # Extract the spectrum part around the wavelength.
+                    x_sec = x[x_low : x_high]
+                    spec_sec = xy_spec[x_low : x_high]
+
+
+                    #==============================--------------------
+                    # Check for NaN-elements:
+
+                    print(np.argwhere(~np.isnan(spec_sec))) # TEST /2 or /1 ?
+                    count = np.argwhere(~np.isnan(spec_sec)).size/2
+                    nan_count = \
+                        np.argwhere(np.isnan(xy_spec[xi_low : xi_high])).size/2
+                    if nan_count > 0 or count < 7:
+                        log_st = "no"
+                        if count >  0: log_st = "only" + str(count)
+                        logstr = screxe + "Spectrum [" + str(ix + 1) + ", " + \
+                            str(iy + 1) + "] / [" + str(xsize) + ", " + \
+                            str(ysize) + "] :: There were " + log_st + \
+                            " finite pixels in the spectrum - skip."
+                        print(log_str)
+                        logging.info(logstr)
+
+                        continue
+
+
+                    #if ~z_scalar then begin
+                    #   z_use += z_value[kl]
+                    #   z_use_n ++
+                    #endif
+
+
+                    #==============================--------------------
+                    # Fit the emission line.
+
+                    xstr = str(ix + 1) + ", " + str(iy + 1) + ", " + \
+                        str(elines[i])
+
+                    w_i = p3d_tool_d11_mpfit(w_init, dwl, cdisp, \
+                           x=x_sec, y=spec_sec, w_too=w_too, ok_fit=ok_fit, \
+                           xstr=xstr, logunit=logunit, verbose=verbose, \
+                           error=error, debug=debug, contall=contall)
+                    if error != 0: return
+
+                    if e_count > 0: del w_too
+
+                    if ok_fit:
+                        w_i__low = math.floor(w_i - twave)
+                        if w_i__low < 0: w_i__low = 0
+                        if w_i__low > nwave - 1: w_i__low = nwave - 1
+
+                        w_i__high = math.ceil(w_i + twave) + 1
+                        if w_i__high < 1: w_i__high = 1
+                        if w_i__high > nwave: w_i__high = nwave
+
+                        if w_i__high - w_i__low > 1:
+                           e_mask[w_i__low : w_i__high, ix, iy] = i
+
+
         # Sum the flux in the selected aperture for all layers.
 
         if axis_s == 1:
@@ -461,136 +1001,68 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
 
         for i in range(0, nwave):
 
-            if verbose >= 1:
-                log_str = screxe + "Layer {0:{width}} / " + str(nwave) + " :: "
-                print(log_str.format(i + 1, width=nwidth), end="")
-                logging.info(log_str)
-
-            # Calculate the contribution to the flux on the feature blue side.
-
-            sb_0 = i - (offset+dwave)
-            sb_1 = i - offset + 1
-            (sb_0, sb_1, sb_str) = d11_spec_sec(sb_0, sb_1, mask, pos=False)
-
-            nb = 0
-            if sb_1 > sb_0:
-                nb = sb_1 - sb_0
-                I_blue = spec[sb_0 : sb_1].sum()
-
-            # Calculate the contribution to the flux on the feature red side.
-
-            sr_0 = i + offset
-            sr_1 = i + (offset+dwave) + 1
-
-            (sr_0, sr_1, sr_str) = d11_spec_sec(sr_0, sr_1, mask)
-
-            nr = 0
-            if sr_1 > sr_0:
-                nr = sr_1 - sr_0
-                I_red  = spec[sr_0 : sr_1].sum()
+            log_str = screxe + "Layer " + str(i + 1).rjust(nwidth) + " / " \
+                + str(nwave) + " :: "
+            #log_str = print(tmp.format(i + 1, width=nwidth), end="")
 
 
-            # Sum up all flux in the blue and red bands around the feature.
+            if use_emissionlines:
 
-            if axis_s == 1:
-                if nb > 0:
-                    img_blue = np.sum(data[:, :, sb_0 : sb_1], axis=2)
-                if nr > 0:
-                    img_red  = np.sum(data[:, :, sr_0 : sr_1], axis=2)
-                img_i = data[:, :, i]
-            elif axis_s == 2:
-                if nb > 0:
-                    img_blue = np.sum(data[:, sb_0 : sb_1, :], axis=1)
-                if nr > 0:
-                    img_red  = np.sum(data[:, sr_0 : sr_1, :], axis=1)
-                img_i = data[:, i, :]
+                #===============================================================
+                #===============================================================
+                #===============================================================
+                # Loop through each spatial element separately to create an
+                # image that depends on both emission lines and telluric lines.
+                #===============================================================
+                #===============================================================
+                #===============================================================
+
+                for ixy in range(0, xsize * ysize):
+
+                    ix = ixy // xsize
+                    iy = ixy % xsize
+
+                    log_str__i = log_str + \
+                        " [" + str(ix+1) + ", " + str(iy+1) + "] :: "
+
+                    img = d11_filter(i, offset, dwave, spec, data,
+                                     axis_s=axis_s, ix=ix, iy=iy, mask=mask,
+                                     emask=e_mask[:, ix, iy], inmsg=log_str__i,
+                                     nwidth=nwidth, dwidth=dwidth,
+                                     verbose=verbose, debug=debug)
+
+                    if axis_s == 1:
+                        odata[iy, ix, i] = img
+                    elif axis_s == 2:
+                        odata[iy, i, ix] = img
+                    else:
+                        odata[i, iy, ix] = img
+
+
             else:
-                if nb > 0:
-                    img_blue = np.sum(data[sb_0 : sb_1, :, :], axis=0)
-                if nr > 0:
-                    img_red  = np.sum(data[sr_0 : sr_1, :, :], axis=0)
-                img_i = data[i, :, :]
 
+                #===============================================================
+                #===============================================================
+                #===============================================================
+                # Only consider telluric lines.
+                #===============================================================
+                #===============================================================
+                #===============================================================
 
-            # Correct the layer i flux by subtracting blue and red contrib.
+                img = d11_filter(i, offset, dwave, spec, data, axis_s=axis_s,
+                                 mask=mask, inmsg=log_str, nwidth=nwidth,
+                                 dwidth=dwidth, verbose=verbose, debug=debug)
 
-            if nb == 0 and nr == 0:
-                img = img_i  # No correction possible
-                msg1 = "not corrected."
-                msg2 = "red band: -, blue band: -."
-            elif nb == 0:
-                if np.isnan(img_red).all():
-                    img = img_i
+                if axis_s == 1:
+                    odata[:, :, i] = img
+                elif axis_s == 2:
+                    odata[:, i, :] = img
                 else:
-                    corr_fac = spec[i]*nr/I_red
-                    img = img_i - corr_fac*nr/img_red
-                msg1 = "corrected using red band."
-                msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
-                    "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
-                    " [px] (n = {5:{dwidth}})".format("-", "-", \
-                        0, sr_0 + 1, sr_1, sr_1 - sr_0, \
-                        width=nwidth, dwidth=dwidth)
-                msg3 = "."
-                if sr_str != "":
-                    msg3 = " :: Telluric line at continuum bandpass: " \
-                        "{0}.".format(sr_str)
-            elif nr == 0:
-                if np.isnan(img_blue).all():
-                    img = img_i
-                else:
-                    corr_fac = spec[i]*nb/I_blue
-                    img = img_i - corr_fac*nb/img_blue
-                msg1 = "corrected using blue band."
-                msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
-                    "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
-                    " [px] (n = {5:{dwidth}})".format(sb_0 + 1, \
-                        sb_1, sb_1 - sb_0, "-", "-", \
-                        0, width=nwidth, dwidth=dwidth)
-                msg3 = "."
-                if sb_str != "":
-                    msg3 = " :: Telluric line at continuum bandpass: " \
-                        "{0}.".format(sb_str)
-            else:
-                corr_fac = spec[i]/(I_blue/nb + I_red/nr)
-                img = img_i - corr_fac*(img_blue/nb + img_red/nr)
-                msg1 = "corrected using blue and red bands."
-                msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
-                    "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
-                    " [px] (n = {5:{dwidth}})".format(sb_0 + 1, \
-                        sb_1, sb_1 - sb_0, sr_0 + 1, sr_1, \
-                        sr_1 - sr_0, width=nwidth, dwidth=dwidth)
-                msg3 = ""
-                msgp = ""
-                if sb_str != "" or sr_str != "":
-                    msg3 = " :: Telluric line at continuum bandpass: "
+                    odata[i, :, :] = img
 
-                msg3b = ""
-                if sb_str != "":
-                    msg3b = "{0}".format(sb_str)
-                    msgp = "."
 
-                msg3r = ""
-                if sr_str != "":
-                    if msg3b != "": msg3b = msg3b + ", "
-                    msg3r = "{0}".format(sr_str)
-                    msgp = "."
 
-                msg3 = msg3 + msg3b + msg3r + msgp
 
-            if verbose >= 1:
-                if verbose == 1:
-                    log_str = msg1
-                else:
-                    log_str = msg2 + msg3
-                print(log_str)
-                logging.info(log_str)
-
-            if axis_s == 1:
-                odata[:, :, i] = img
-            elif axis_s == 2:
-                odata[:, i, :] = img
-            else:
-                odata[i, :, :] = img
 
 
         # Add data processing header entries and write a file with the
@@ -624,7 +1096,7 @@ if __name__ == "__main__":
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
  
     parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
-                            description=___doc___)
+                            description=__doc__)
 
     ###########################################################################
     # Parsing command-line arguments and options:
@@ -638,23 +1110,34 @@ if __name__ == "__main__":
     parser.add_argument("cwidth", help="Bandwidth of continuum band for subt" \
                         "raction.", type=float)
 
-    parser.add_argument("-d", "--offset", action="store", type=int, \
+    parser.add_argument("-f", "--offset", action="store", type=int, \
                         help="Specify a name of a plain-text file with tellu" \
                         "ric lines.")
-    parser.add_argument("-t", "--telluric", action="store", type=str, \
+    parser.add_argument("-e", "--emissionlines", action="store", type=str, \
+                        help="Specify a name of a plain-text file with [poss" \
+                        "ibly] redshifted emission lines.")
+    parser.add_argument("-d", "--dwl", action="store", type=float, \
+                        help="Allowed deviation of fits from provided line c" \
+                        "enter wavelengths [Angstrom].")
+    parser.add_argument("-z", "--vel_z", action="store", type=float, \
+                        help="A scalar decimal value that specifies the reds" \
+                        "hift of emission lines [km/s].")
+    parser.add_argument("-t", "--telluriclines", action="store", type=str, \
                         help="Specify a name of a plain-text file with tellu" \
                         "ric lines.")
     parser.add_argument("-q", "--twidth", action="store", type=float, \
                         help="Telluric line bandwidth [Angstrom].")
-    parser.add_argument("-u", "--commentstelluric", action="store", type=str, \
+    parser.add_argument("-u", "--commentslines", action="store", type=str, \
                         help="Specify a comment character to use with the pl" \
-                        "ain-text telluric lines file [default: '#'].")
+                        "ain-text telluric and emission lines file [default:" \
+                        " '#'].")
     parser.add_argument("-o", "--ofilename", action="store", type=str, \
                         help="Specify a name of the output file.")
     parser.add_argument("-w", "--overwrite", action="store_true", \
                         help="Overwrite existing output files.")
     parser.add_argument("-v", "--verbose", action="store", type=int, \
                         help="Be verbose on what the tool does to the data.")
+    parser.add_argument("--debug", action="store_true", help="Debugging mode.")
 
     args = parser.parse_args()
 
@@ -662,6 +1145,16 @@ if __name__ == "__main__":
         offset = args.offset
     else:
         offset = 5
+
+    if args.dwl is not None:
+        dwl = args.dwl
+    else:
+        dwl = 1.0
+
+    if args.vel_z is not None:
+        vel_z = args.vel_z
+    else:
+        vel_z = 0.0
 
     if args.twidth is not None:
         twidth = args.twidth
@@ -674,7 +1167,7 @@ if __name__ == "__main__":
         verbose = 0
 
     d11(args.filename, args.x, args.y, args.apr, args.cwidth,
-        offset=offset, telluric=args.telluric, twidth=twidth,
-        commentstelluric=args.commentstelluric,
-        ofilename=args.ofilename, overwrite=args.overwrite,
-        verbose=verbose)
+        offset=offset, emissionlines=args.emissionlines, dwl=dwl, vel_z=vel_z,
+        telluriclines=args.telluriclines, twidth=twidth,
+        commentslines=args.commentslines, ofilename=args.ofilename,
+        overwrite=args.overwrite, verbose=verbose, debug=args.debug)
