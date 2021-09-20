@@ -58,7 +58,7 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
             mtmask = max(tmask[i_0 : i_1])
             memask = max(emask[i_0 : i_1])
 
-            while mtmask > 0 || memask > 0:
+            while mtmask > 0 or memask > 0:
                 it__str = ""
                 if mtmask > 0: it_str = str(tmask[i_0]) + " (red)"
                 ie_str = ""
@@ -93,7 +93,7 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
             mtmask = max(tmask[i_0 : i_1])
             memask = max(emask[i_0 : i_1])
 
-            while mtmask > 0 || memask > 0:
+            while mtmask > 0 or memask > 0:
                 it__str = ""
                 if mtmask > 0: it_str = str(tmask[i_1]) + " (blue)"
                 ie_str = ""
@@ -248,6 +248,7 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
     # Debugging: plot diagnostic properties.
 
     if debug and not contall:
+        pass
         # Could include this...or not
 
     return (m.params[2])
@@ -631,7 +632,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
 
         clight = 2.99792458e10
         vel_z *= 1e5  # km/s => cm/s
-        z = math.sqrt((1.0 + vel_z / clight) / (1.0 - vel_z / clight)) - 1.0
+        z = np.sqrt((1.0 + vel_z / clight) / (1.0 - vel_z / clight)) - 1.0
 
 
     use_telluriclines = False
@@ -844,11 +845,11 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
                 iy = ixy // xsize
 
                 if axis_s == 1:
-                    xy_spec = data[iy, ix, *]
+                    xy_spec = data[iy, ix, :]
                 elif axis_s == 2:
-                    xy_spec = data[iy, *, ix]
+                    xy_spec = data[iy, :, ix]
                 else:
-                    xy_spec = data[*, iy, ix]
+                    xy_spec = data[:, iy, ix]
 
 
                 # Check for NaN-element-only spectra and skip them.
@@ -857,7 +858,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
 
                 if count == 0:
                     logstr = screxe + "Spectrum [" + str(ix + 1) + ", " + \
-                        str(iy + 1)) + "] / [" + str(xsize) + ", " + \
+                        str(iy + 1) + "] / [" + str(xsize) + ", " + \
                         str(ysize) + "] :: There were no finite pixels in the" \
                         " spectrum - skip."
                     print(log_str)
@@ -936,7 +937,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
                         log_st = "no"
                         if count >  0: log_st = "only" + str(count)
                         logstr = screxe + "Spectrum [" + str(ix + 1) + ", " + \
-                            str(iy + 1)) + "] / [" + str(xsize) + ", " + \
+                            str(iy + 1) + "] / [" + str(xsize) + ", " + \
                             str(ysize) + "] :: There were " + log_st + \
                             " finite pixels in the spectrum - skip."
                         print(log_str)
@@ -1093,7 +1094,7 @@ if __name__ == "__main__":
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
  
     parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
-                            description=___doc___)
+                            description=__doc__)
 
     ###########################################################################
     # Parsing command-line arguments and options:
