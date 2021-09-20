@@ -39,6 +39,9 @@
 ## ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 ## POSSIBILITY OF SUCH DAMAGE.
 
+import numpy as np
+import logging
+
 def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
 
     N = len(tmask)
@@ -129,7 +132,6 @@ def d11_mpfit_f(p, fjac=None, x=None, y=None, dy=None, coff=None,
     # If fjac==None then partial derivatives should not be
     # computed.  It will always be None if MPFIT is called with default
     # flag.
-    import numpy as np
 
     f = p[0] + p[1] * x
 
@@ -163,7 +165,6 @@ def d11_mpfit_f(p, fjac=None, x=None, y=None, dy=None, coff=None,
 
 def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
               xstr="", verbose=None, error=0, debug=False, contall=False):
-    import numpy as np
 
     ok_fit = 0
 
@@ -262,8 +263,8 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
 
     sb_0 = i - (offset+dwave)
     sb_1 = i - offset + 1
-    (sb_0, sb_1, sb_str) = d11_spec_sec(sb_0, sb_1, mask,
-                                        emask=emask, pos=False)
+    (sb_0, sb_1, sb_str, sb_type) = d11_spec_sec(sb_0, sb_1, mask,
+                                                 emask=emask, pos=False)
 
     nb = sb_1 - sb_0 if sb_1 > sb_0 else 0
     if nb > 0: I_blue = spec[sb_0 : sb_1].sum()
@@ -274,7 +275,7 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
     sr_0 = i + offset
     sr_1 = i + (offset+dwave) + 1
 
-    (sr_0, sr_1, sr_str) = d11_spec_sec(sr_0, sr_1, mask, emask=emask)
+    (sr_0, sr_1, sr_str, sr_type) = d11_spec_sec(sr_0, sr_1, mask, emask=emask)
 
     nr = sr_1 - sr_0 if sr_1 > sr_0 else 0
     if nr > 0: I_red = spec[sr_0 : sr_1].sum()
@@ -320,6 +321,7 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
         img = img_i  # No correction possible
         msg1 = "not corrected."
         msg2 = "red band: -, blue band: -."
+        msg3 = ""
 
     elif nb == 0:
 
@@ -403,10 +405,10 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
     return img
 
 
-def d11(filename, x, y, apr, cwidth, ofilename='DEF',
+def d11(filename, x, y, apr, cwidth, ofilename=None,
         offset=5, wave=None, spec=None, emissionlines=None, dwl=1.0, vel_z=0.0,
         telluriclines=None, twidth=3.0,
-        commentslines=None, overwrite=False, verbose=0):
+        commentslines=None, overwrite=False, verbose=0, debug=False):
     """astro-d11: astronomical spectrum datacube continuum subtraction
     filter
 
@@ -552,10 +554,8 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
     from pathlib import Path
     import inspect
     import math
-    import numpy as np
     from astropy.io import fits
     import time
-    import logging
 
     screxe = os.path.basename(__file__)
     screxe = screxe[0:screxe.find(".")] + ": "
@@ -573,7 +573,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
             "-type file with a datacube."
         raise RuntimeError(msg)
 
-    if ofilename == "DEF" or ofilename is None:
+    if ofilename is None:
         if filename.endswith(".fits"):
             idx = filename.rfind(".")
             ofilename = filename[0:idx] + "_d11.fits"
@@ -618,6 +618,8 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
         emissionlines = os.path.join(path, "data",
                                      "emission_lines-ground_based-noFe.dat")
         use_emissionlines = True
+
+    use_emissionlines = False
 
     if use_emissionlines:
         elines = np.loadtxt(emissionlines, comments=comments)
@@ -666,8 +668,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
             raise RuntimeError(msg)
         if os.path.exists(ofilename) and overwrite: os.remove(logfile)
 
-        logging.basicConfig(filename=logfile,
-                            format="%(asctime)s %(message)s",
+        logging.basicConfig(filename=logfile, format="%(asctime)s %(message)s",
                             level=logging.DEBUG)
         log_str = [screxe + "Apply a differential emission line filter (DELF" \
                    ") on an astronomical datacube.", \
@@ -680,16 +681,19 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
                    screxe + "  twidth = " + str(twidth), \
                    screxe + "  offset = " + str(offset)]
         if use_telluriclines or use_emissionlines:
-            log_str = [log_str, screxe + "  commentslines = \"" +
-                       comments + "\""]
+            log_str.append(screxe + "  commentslines = \"" + comments + "\"")
         if use_emissionlines:
-            log_str = [screxe + "  emissionlines = \"" + emissionlines + "\"", \
+            log_str = [log_str, \
+                       screxe + "  emissionlines = \"" + emissionlines + "\"", \
                        screxe + "  dwl = " + str(dwl), \
                        screxe + "  vel_z = " + str(vel_z)]
         if use_telluriclines:
-            log_str = [screxe + "  telluriclines = \"" + telluriclines + "\""]
-        log_str = [log_str, screxe + "  ofilename = \"" + ofilename + "\""]
-        for log_str_i in log_str: logging.info(log_str_i)
+            log_str.append(screxe + \
+                           "  telluriclines = \"" + telluriclines + "\"")
+        log_str.append(screxe + "  ofilename = \"" + ofilename + "\"")
+        for log_str_i in log_str:
+            print(log_str_i)
+            logging.info(log_str_i)
 
     try:
         with fits.open(filename) as hdul:
@@ -745,7 +749,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
         if verbose >= 2:
             logging.info(screxe + "NAXIS" + axis_ss + "=" + str(nwave) +
                          ", CRVAL" + axis_ss + "=" + str(crval) +
-                         ", CDELT" + axis_ss + "=" + str(cdelt) +
+                         ", CDELT" + axis_ss + "=" + str(cdisp) +
                          ", CRPIX" + axis_ss + "=" + str(crpix))
 
         xsize = hdr1["naxis" + str(axis_x)]
@@ -997,8 +1001,9 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
 
         for i in range(0, nwave):
 
-            tmp = screxe + "Layer {0:{width}} / " + str(nwave) + " :: "
-            log_str = print(tmp.format(i + 1, width=nwidth), end="")
+            log_str = screxe + "Layer " + str(i + 1).rjust(nwidth) + " / " \
+                + str(nwave) + " :: "
+            #log_str = print(tmp.format(i + 1, width=nwidth), end="")
 
 
             if use_emissionlines:
@@ -1024,8 +1029,7 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
                                      axis_s=axis_s, ix=ix, iy=iy, mask=mask,
                                      emask=e_mask[:, ix, iy], inmsg=log_str__i,
                                      nwidth=nwidth, dwidth=dwidth,
-                                     logunit=logunit, verbose=verbose,
-                                     error=error, debug=debug)
+                                     verbose=verbose, debug=debug)
 
                     if axis_s == 1:
                         odata[iy, ix, i] = img
@@ -1046,10 +1050,8 @@ def d11(filename, x, y, apr, cwidth, ofilename='DEF',
                 #===============================================================
 
                 img = d11_filter(i, offset, dwave, spec, data, axis_s=axis_s,
-                                 mask=mask, inmsg=log_str,
-                                 nwidth=nwidth, dwidth=dwidth,
-                                 logunit=logunit, verbose=verbose, error=error,
-                                 debug=debug)
+                                 mask=mask, inmsg=log_str, nwidth=nwidth,
+                                 dwidth=dwidth, verbose=verbose, debug=debug)
 
                 if axis_s == 1:
                     odata[:, :, i] = img
@@ -1135,6 +1137,7 @@ if __name__ == "__main__":
                         help="Overwrite existing output files.")
     parser.add_argument("-v", "--verbose", action="store", type=int, \
                         help="Be verbose on what the tool does to the data.")
+    parser.add_argument("--debug", action="store_true", help="Debugging mode.")
 
     args = parser.parse_args()
 
@@ -1167,4 +1170,4 @@ if __name__ == "__main__":
         offset=offset, emissionlines=args.emissionlines, dwl=dwl, vel_z=vel_z,
         telluriclines=args.telluriclines, twidth=twidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
-        overwrite=args.overwrite, verbose=verbose)
+        overwrite=args.overwrite, verbose=verbose, debug=args.debug)
