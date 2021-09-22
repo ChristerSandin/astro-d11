@@ -40,6 +40,7 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
+import scipy
 import logging
 
 def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
@@ -163,9 +164,12 @@ def d11_mpfit_f(p, fjac=None, x=None, y=None, dy=None, coff=None,
         return (status, (y-f)/err)
 
 
-def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
-              xstr="", verbose=None, error=0, debug=False, contall=False):
+def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
+              xstr="", verbose=None, debug=False, contall=False):
 
+    import mpfit
+
+    error = 0
     ok_fit = 0
 
     # Fit the data with a Gaussian.
@@ -186,14 +190,16 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
     # line center.
     parinfo[2]['value'] = w_init
     parinfo[2]['limited'] = [1, 1]
-    parinfo[2]['limits'] = w_init + [- dwl, dwl] / cdelt
+    parinfo[2]['limits'][0] = w_init - dwl / cdisp
+    parinfo[2]['limits'][1] = w_init + dwl / cdisp
 
     # sigma.
     sigma_min = 0.8 * 2.0 / np.sqrt(8.0 * np.log(2.0))
     sigma_max = 1.2 * 2.0 / np.sqrt(8.0 * np.log(2.0))
     parinfo[3]['value'] = 2.0 / np.sqrt(8.0 * np.log(2.0))
     parinfo[3]['limited'] = [1, 1]
-    parinfo[3]['limits'] = [sigma_min, sigma_max]
+    parinfo[3]['limits'][0] = sigma_min
+    parinfo[3]['limits'][1] = sigma_max
 
     # intensity.
     parinfo[4]['value'] = 1e3
@@ -222,8 +228,11 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
 
     # Perform the fit.
     quiet = 1 if verbose < 4 else 0
-    m = mpfit('d11_mpfit_f', p0, functkw=fctargs, parinfo=parinfo, \
-                maxiter=100, quiet=quiet)
+    #m = mpfit.mpfit('d11_mpfit_f', p0, functkw=fctargs, parinfo=parinfo, \
+    #                maxiter=100, quiet=quiet)
+    (m_status, m) = mpfit.mpfit('d11_mpfit_f', p0, functkw=fctargs, \
+                                debug=True, \
+                                parinfo=parinfo, maxiter=100, quiet=quiet)
 
     y *= norm
     dy *= norm
@@ -252,7 +261,7 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None, ok_fit=None,
         pass
         # Could include this...or not
 
-    return (m.params[2])
+    return (m.params[2], of_fit, error)
 
 
 def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
@@ -455,7 +464,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         [-u <char>] [-o <file>] [-w] [-v <int>]
 
     <file>:
-      The name of the datacube file. The file needs to be stored using
+      The name of the data cube file. The file needs to be stored using
       the FITS format. An attempt is made at locating the dispersion
       axis in the datacube using the CTYPEx header keywords (x is an
       integer in the range 1-3), which needs to be set to either AWAV
@@ -619,10 +628,8 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                                      "emission_lines-ground_based-noFe.dat")
         use_emissionlines = True
 
-    use_emissionlines = False
-
     if use_emissionlines:
-        elines = np.loadtxt(emissionlines, comments=comments)
+        elines = np.loadtxt(emissionlines, comments=comments, usecols=(0))
 
         if not isinstance(dwl, float):
             msg = screxe + "<dwl> must be set to a decimal value (Angstrom)."
@@ -653,7 +660,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         use_telluriclines = True
 
     if use_telluriclines:
-        tlines = np.loadtxt(telluriclines, comments=comments)
+        tlines = np.loadtxt(telluriclines, comments=comments, usecols=(0))
 
 
     if verbose >= 1:
@@ -684,7 +691,8 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
             log_str.append(screxe + "  commentslines = \"" + comments + "\"")
         if use_emissionlines:
             log_str = [log_str, \
-                       screxe + "  emissionlines = \"" + emissionlines + "\"", \
+                       screxe + "  emissionlines = \"" + emissionlines + \
+                       "\"", \
                        screxe + "  dwl = " + str(dwl), \
                        screxe + "  vel_z = " + str(vel_z)]
         if use_telluriclines:
@@ -754,6 +762,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
         xsize = hdr1["naxis" + str(axis_x)]
         ysize = hdr1["naxis" + str(axis_y)]
+        nwidth = max([len(str(xsize)), len(str(ysize))])
 
 
         # Setup a wavelength array.
@@ -820,7 +829,6 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         ny = 0
         if y_1 > y_0: ny = y_1 - y_0
 
-
         if verbose >= 1:
             log_str = screxe + "Aperture: [" + str(x_0 + 1) + ":" + \
                 str(x_1) + ", " + str(y_0 + 1) + ":" + str(y_1) + \
@@ -828,6 +836,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                 " [px]."
             print(log_str)
             logging.info(log_str)
+            del log_str
 
 
         #========================================------------------------------
@@ -838,7 +847,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         if use_emissionlines:
 
             x = np.arange(nwave, dtype=float)
-            e_mask = np.zeros(nwave, xsize, ysize)
+            e_mask = np.zeros((nwave, xsize, ysize))
 
             twave = round(0.5*twidth/cdisp)
 
@@ -861,12 +870,16 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                 count = np.argwhere(~np.isnan(xy_spec)).size/2
 
                 if count == 0:
-                    logstr = screxe + "Spectrum [" + str(ix + 1) + ", " + \
-                        str(iy + 1) + "] / [" + str(xsize) + ", " + \
-                        str(ysize) + "] :: There were no finite pixels in the" \
-                        " spectrum - skip."
+                    log_str = screxe + "Spectrum [" + \
+                        str(ix + 1).rjust(nwidth) + ", " + \
+                        str(iy + 1).rjust(nwidth) + "] / [" + \
+                                 str(xsize).rjust(nwidth) + ", " + \
+                                 str(ysize).rjust(nwidth) + \
+                        "] :: There were no finite pixels in the " \
+                        "spectrum - skip."
                     print(log_str)
-                    logging.info(logstr)
+                    logging.info(log_str)
+                    del log_str
 
                     continue
 
@@ -893,27 +906,26 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                     if x__high < (- 1): x__high = - 1
                     if x__high > nwave + 2: x__high = nwave + 2
 
-                    w_init_oo = (emission_lines * (1.0 + z) - crval)/cdisp \
-                                                                - 1.0 + crpix
-                    tmp = np.where(int(w_init_oo) >= x_low and \
-                                   int(w_init_oo) <= x_high and \
-                                   w_init_oo != w_init)
+                    w_init_oo = (elines*(1.0+z) - crval)/cdisp - 1.0 + crpix
+                    tmp = np.asarray((w_init_oo.astype(int) >= x__low) & \
+                                     (w_init_oo.astype(int) <= x__high) & \
+                                     (w_init_oo != w_init)).nonzero()
                     if np.array(tmp).size > 0:
                         e_count = np.array(tmp).size
-                        w_too = tmp
+                        w_too = tmp[0][:]
                         del tmp
                     else:
                         e_count = 0
 
 
                     # The elements next to the emission line must be finite.
-                    xi_low = math.floor(w_init - 2)
-                    if xi_low < 0: xi_low = 0
-                    if xi_low > nwave - 1: xi_low = nwave - 1
+                    xi__low = math.floor(w_init - 2)
+                    if xi__low < 0: xi__low = 0
+                    if xi__low > nwave - 1: xi__low = nwave - 1
 
-                    xi_high = math.ceil(w_init + 2) + 1
-                    if xi_high < 1: xi_high = 1
-                    if xi_high > nwave: xi_high = nwave
+                    xi__high = math.ceil(w_init + 2) + 1
+                    if xi__high < 1: xi__high = 1
+                    if xi__high > nwave: xi__high = nwave
 
                     x__low = math.floor(w_init - 2*twidth - 2)
                     if x__low < 0: x__low = 0
@@ -923,29 +935,31 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                     if x__high < 1: x__high = 1
                     if x__high > nwave: x__high = nwave
 
-                    if x_low + 1 >= x_high: continue
+                    if x__low + 1 >= x__high: continue
 
                     # Extract the spectrum part around the wavelength.
-                    x_sec = x[x_low : x_high]
-                    spec_sec = xy_spec[x_low : x_high]
+                    x_sec = x[x__low : x__high]
+                    spec_sec = xy_spec[x__low : x__high]
 
 
                     #==============================--------------------
                     # Check for NaN-elements:
 
-                    print(np.argwhere(~np.isnan(spec_sec))) # TEST /2 or /1 ?
-                    count = np.argwhere(~np.isnan(spec_sec)).size/2
-                    nan_count = \
-                        np.argwhere(np.isnan(xy_spec[xi_low : xi_high])).size/2
+                    count = np.argwhere(~np.isnan(spec_sec)).size//2
+                    nan_count = np.argwhere(np.isnan(
+                        xy_spec[xi__low : xi__high])).size/2
                     if nan_count > 0 or count < 7:
                         log_st = "no"
-                        if count >  0: log_st = "only" + str(count)
-                        logstr = screxe + "Spectrum [" + str(ix + 1) + ", " + \
-                            str(iy + 1) + "] / [" + str(xsize) + ", " + \
-                            str(ysize) + "] :: There were " + log_st + \
-                            " finite pixels in the spectrum - skip."
+                        if count >  0: log_st = "only " + str(count)
+                        log_str = screxe + "Spectrum [" + \
+                            str(ix + 1).rjust(nwidth) + ", " + \
+                            str(iy + 1).rjust(nwidth) + "] / [" + \
+                            str(xsize).rjust(nwidth) + ", " + \
+                            str(ysize).rjust(nwidth) + "] :: There were " + \
+                            log_st + " finite pixels in the spectrum - skip."
                         print(log_str)
-                        logging.info(logstr)
+                        logging.info(log_str)
+                        del log_str
 
                         continue
 
@@ -962,10 +976,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                     xstr = str(ix + 1) + ", " + str(iy + 1) + ", " + \
                         str(elines[i])
 
-                    w_i = p3d_tool_d11_mpfit(w_init, dwl, cdisp, \
-                           x=x_sec, y=spec_sec, w_too=w_too, ok_fit=ok_fit, \
-                           xstr=xstr, logunit=logunit, verbose=verbose, \
-                           error=error, debug=debug, contall=contall)
+                    (w_i, ok_fit, error) = \
+                        d11_mpfit(w_init, dwl, cdisp, x=x_sec, y=spec_sec, \
+                                  w_too=w_too, xstr=xstr, verbose=verbose, \
+                                  debug=debug, contall=contall)
                     if error != 0: return
 
                     if e_count > 0: del w_too
@@ -1008,14 +1022,14 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
             if use_emissionlines:
 
-                #===============================================================
-                #===============================================================
-                #===============================================================
+                #==============================================================
+                #==============================================================
+                #==============================================================
                 # Loop through each spatial element separately to create an
                 # image that depends on both emission lines and telluric lines.
-                #===============================================================
-                #===============================================================
-                #===============================================================
+                #==============================================================
+                #==============================================================
+                #==============================================================
 
                 for ixy in range(0, xsize * ysize):
 
@@ -1041,13 +1055,13 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
             else:
 
-                #===============================================================
-                #===============================================================
-                #===============================================================
+                #==============================================================
+                #==============================================================
+                #==============================================================
                 # Only consider telluric lines.
-                #===============================================================
-                #===============================================================
-                #===============================================================
+                #==============================================================
+                #==============================================================
+                #==============================================================
 
                 img = d11_filter(i, offset, dwave, spec, data, axis_s=axis_s,
                                  mask=mask, inmsg=log_str, nwidth=nwidth,
@@ -1089,6 +1103,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
             log_str = screxe + "Wrote resulting data to the file " + ofilename
             print(log_str)
             logging.info(log_str)
+            del log_str
 
         
 # Create a launcher in case the program is launched from system shell:
@@ -1103,40 +1118,47 @@ if __name__ == "__main__":
     ###########################################################################
 
     parser.add_argument("filename", help="The name of a FITS file with a dat" \
-                        "acube.")
-    parser.add_argument("x", help="Aperture x coordinate [pixel].", type=float)
-    parser.add_argument("y", help="Aperture y coordinate [pixel].", type=float)
-    parser.add_argument("apr", help="Aperture radius [pixel].", type=float)
-    parser.add_argument("cwidth", help="Bandwidth of continuum band for subt" \
-                        "raction.", type=float)
+                        "a cube; with two spatial and one spectral dimension.")
+    parser.add_argument("x", help="Reference region aperture x coordinate " \
+                        "[pixel].", type=float)
+    parser.add_argument("y", help="Reference region aperture y coordinate " \
+                        "[pixel].", type=float)
+    parser.add_argument("apr", help="Reference region aperture size [pixel].",
+                        type=float)
+    parser.add_argument("cwidth", help="Total (blue + red) continuum bandwid" \
+                        "th for subtraction [Angstrom].", type=float)
 
     parser.add_argument("-f", "--offset", action="store", type=int, \
-                        help="Specify a name of a plain-text file with tellu" \
-                        "ric lines.")
+                        help="Specifies the (initial) offset of the red and " \
+                        "blue continuum regions away from the current layer " \
+                        "(wavelength) [pixel].")
     parser.add_argument("-e", "--emissionlines", action="store", type=str, \
-                        help="Specify a name of a plain-text file with [poss" \
-                        "ibly] redshifted emission lines.")
+                        help="Specifies the name of a plain-text file listin" \
+                        "g [possibly] redshifted emission lines [Angstrom].")
     parser.add_argument("-d", "--dwl", action="store", type=float, \
-                        help="Allowed deviation of fits from provided line c" \
-                        "enter wavelengths [Angstrom].")
+                        help="A scalar value that specifies the allowed devi" \
+                        "ation of each fitted line from specified line cente" \
+                        "r wavelengths [Angstrom].")
     parser.add_argument("-z", "--vel_z", action="store", type=float, \
-                        help="A scalar decimal value that specifies the reds" \
-                        "hift of emission lines [km/s].")
+                        help="A scalar value that specifies the redshift of " \
+                        "emission lines [km/s].")
     parser.add_argument("-t", "--telluriclines", action="store", type=str, \
-                        help="Specify a name of a plain-text file with tellu" \
-                        "ric lines.")
+                        help="Specifies the name of a plain-text file listin" \
+                        "g telluric lines [Angstrom].")
     parser.add_argument("-q", "--twidth", action="store", type=float, \
-                        help="Telluric line bandwidth [Angstrom].")
+                        help="Specifies the telluric line bandwidth [Angstro" \
+                        "m].")
     parser.add_argument("-u", "--commentslines", action="store", type=str, \
-                        help="Specify a comment character to use with the pl" \
-                        "ain-text telluric and emission lines file [default:" \
-                        " '#'].")
+                        help="Specifies a comment character to use with the " \
+                        "plain-text telluric and emission lines file [defaul" \
+                        "t: '#'].")
     parser.add_argument("-o", "--ofilename", action="store", type=str, \
-                        help="Specify a name of the output file.")
+                        help="The output file name.")
     parser.add_argument("-w", "--overwrite", action="store_true", \
                         help="Overwrite existing output files.")
     parser.add_argument("-v", "--verbose", action="store", type=int, \
-                        help="Be verbose on what the tool does to the data.")
+                        help="Be verbose on what is done; valid values are: " \
+                        "1, 2, 3, and 4.")
     parser.add_argument("--debug", action="store_true", help="Debugging mode.")
 
     args = parser.parse_args()
