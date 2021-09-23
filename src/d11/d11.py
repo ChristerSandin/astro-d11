@@ -127,47 +127,11 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
     return (i_0, i_1, i_str, i_type)
 
 
-def d11_mpfit_f(p, fjac=None, x=None, y=None, dy=None, coff=None,
-                n_tied=None, funceval=False):
-    # Parameter values are passed in "p"
-    # If fjac==None then partial derivatives should not be
-    # computed.  It will always be None if MPFIT is called with default
-    # flag.
-
-    f = p[0] + p[1] * x
-
-    p_3 = 1e-20
-    if p[3] > p_3: p_3 = p[3]
-
-    u = ((x - p[2])/p_3)**2
-    mask = np.zeros(x.size, dtype=int)
-    mask[u < smax ** 2] = 1
-    f += p[4] / (np.sqrt(2.0 * np.pi) * p[3]) * mask * np.exp(- 0.5 * u * mask)
-    del mask
-
-    # Add the tied lines.
-    for i in range(0, n_tied):
-        ii = 5 + i
-        u = ((x - (p[0]+coff[i]))/p_3)**2
-        mask = np.zeros(x.size, dtype=int)
-        mask[u < smax ** 2] = 1
-        f += p[ii] / (np.sqrt(2.0 * np.pi) * p[3]) * mask \
-            * np.exp(- 0.5 * u * mask)
-        del mask
-
-    # Non-negative status value means MPFIT should continue, negative means
-    # stop the calculation.
-    status = 0
-    if funceval:
-        return (f)
-    else:
-        return (status, (y-f)/err)
-
-
 def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
               xstr="", verbose=None, debug=False, contall=False):
 
-    import mpfit
+    from mpfit import mpfit
+    from d11_mpfit_f import d11_mpfit_f
 
     error = 0
     ok_fit = 0
@@ -228,11 +192,8 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
 
     # Perform the fit.
     quiet = 1 if verbose < 4 else 0
-    #m = mpfit.mpfit('d11_mpfit_f', p0, functkw=fctargs, parinfo=parinfo, \
-    #                maxiter=100, quiet=quiet)
-    (m_status, m) = mpfit.mpfit('d11_mpfit_f', p0, functkw=fctargs, \
-                                debug=True, \
-                                parinfo=parinfo, maxiter=100, quiet=quiet)
+    m = mpfit(d11_mpfit_f, p0, functkw=fctargs, parinfo=parinfo, \
+              maxiter=100, quiet=quiet)
 
     y *= norm
     dy *= norm
@@ -250,7 +211,7 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
                        coff=coff, n_tied=n_tied, funceval=True)
 
     # Need to determine if the fit is good...this could be improved
-    ok_fit = ~np.isnan(m.chisq) and m.nfev > 1 and m.status > 0 and \
+    ok_fit = m.nfev > 1 and m.status > 0 and \
         m.params[3] > sigma_min and \
         m.params[3] < sigma_max and m.params[4] > 0.0
 
@@ -261,7 +222,7 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
         pass
         # Could include this...or not
 
-    return (m.params[2], of_fit, error)
+    return (m.params[2], ok_fit, error)
 
 
 def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
@@ -916,6 +877,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                         del tmp
                     else:
                         e_count = 0
+                        w_too = None
 
 
                     # The elements next to the emission line must be finite.
