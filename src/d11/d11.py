@@ -377,7 +377,7 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
 
 def d11(filename, x, y, apr, cwidth, ofilename=None,
         offset=5, wave=None, spec=None, emissionlines=None, dwl=1.0, vel_z=0.0,
-        telluriclines=None, twidth=3.0,
+        telluriclines=None, bwidth=3.0,
         commentslines=None, overwrite=False, verbose=0, debug=False):
     """astro-d11: astronomical spectrum datacube continuum subtraction
     filter
@@ -411,7 +411,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
     respective region. Telluric line wavelengths are read from a
     plain-text file (--telluriclines) that provides a wavelength value per
     line. The full width of any individual telluric line region can be
-    set (--twidth).
+    set (--bwidth).
 
     The filtered image is written to a file, adding a set of header
     keywords that indicate waht argument values were used ("d11_x",
@@ -487,10 +487,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
       continuum regions. The wavelength unit is Angstrom. The default
       value is: "data/telluric_lines_hires.dat".
 
-    [-q] or [--twidth]:
-      The bandwidth of bandpasses to ignore centered on telluric lines.
-      The value is specified in wavelength units (Angstrom). The default
-      value is 3.0 Å.
+    [-b] or [--bwidth]:
+      The bandwidth of bandpasses to ignore centered on telluric and
+      emission lines. The value is specified in wavelength units
+      (Angstrom). The default value is 3.0 Å.
 
     [-u] or [--commentslines]:
       Specify a character that identifies lines with comments in the
@@ -646,7 +646,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                    screxe + "  y = " + str(y), \
                    screxe + "  apr = " + str(apr), \
                    screxe + "  cwidth = " + str(cwidth), \
-                   screxe + "  twidth = " + str(twidth), \
+                   screxe + "  bwidth = " + str(bwidth), \
                    screxe + "  offset = " + str(offset)]
         if use_telluriclines or use_emissionlines:
             log_str.append(screxe + "  commentslines = \"" + comments + "\"")
@@ -738,15 +738,15 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
         mask = np.zeros(nwave)
         if use_telluriclines:
-            twave = round(0.5*twidth/cdisp)
+            twave = round(0.5*bwidth/cdisp)
             for wave_tell in tlines:
                 w_i = (wave_tell-crval)/cdisp - 1.0 + crpix
 
-                w_i__low = math.floor(w_i - twidth)
+                w_i__low = math.floor(w_i - bwidth)
                 if w_i__low < 0: w_i__low = 0
                 if w_i__low > nwave - 1: w_i__low = nwave - 1
 
-                w_i__high = math.ceil(w_i + twidth) + 1
+                w_i__high = math.ceil(w_i + bwidth) + 1
                 if w_i__high < 1: w_i__high = 1
                 if w_i__high > nwave: w_i__high = nwave
 
@@ -810,7 +810,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
             x = np.arange(nwave, dtype=float)
             e_mask = np.zeros((nwave, xsize, ysize))
 
-            twave = round(0.5*twidth/cdisp)
+            twave = round(0.5*bwidth/cdisp)
 
             # Loop over all spatial elements.
             for ixy in range(0, xsize * ysize):
@@ -859,11 +859,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                     # Locate the possiby redshifted emission line.
 
                     # Collect all emission lines in the interval:.
-                    x__low = math.floor(w_init - 2*twidth)
+                    x__low = math.floor(w_init - 2*bwidth)
                     if x__low < (- 2): x__low = - 2
                     if x__low > nwave + 1: x__low = nwave + 1
 
-                    x__high = math.ceil(w_init + 2*twidth) + 1
+                    x__high = math.ceil(w_init + 2*bwidth) + 1
                     if x__high < (- 1): x__high = - 1
                     if x__high > nwave + 2: x__high = nwave + 2
 
@@ -889,11 +889,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
                     if xi__high < 1: xi__high = 1
                     if xi__high > nwave: xi__high = nwave
 
-                    x__low = math.floor(w_init - 2*twidth - 2)
+                    x__low = math.floor(w_init - 2*bwidth - 2)
                     if x__low < 0: x__low = 0
                     if x__low > nwave - 1: x__low = nwave - 1
 
-                    x__high = math.ceil(w_init + 2*twidth + 2) + 1
+                    x__high = math.ceil(w_init + 2*bwidth + 2) + 1
                     if x__high < 1: x__high = 1
                     if x__high > nwave: x__high = nwave
 
@@ -1107,9 +1107,9 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--telluriclines", action="store", type=str, \
                         help="Specifies the name of a plain-text file listin" \
                         "g telluric lines [Angstrom].")
-    parser.add_argument("-q", "--twidth", action="store", type=float, \
-                        help="Specifies the telluric line bandwidth [Angstro" \
-                        "m].")
+    parser.add_argument("-q", "--bwidth", action="store", type=float, \
+                        help="The width of telluric and emission line bandpa" \
+                        "sses [Angstrom].")
     parser.add_argument("-u", "--commentslines", action="store", type=str, \
                         help="Specifies a comment character to use with the " \
                         "plain-text telluric and emission lines file [defaul" \
@@ -1140,10 +1140,10 @@ if __name__ == "__main__":
     else:
         vel_z = 0.0
 
-    if args.twidth is not None:
-        twidth = args.twidth
+    if args.bwidth is not None:
+        bwidth = args.bwidth
     else:
-        twidth = 3.0
+        bwidth = 3.0
 
     if args.verbose is not None:
         verbose = args.verbose
@@ -1152,6 +1152,6 @@ if __name__ == "__main__":
 
     d11(args.filename, args.x, args.y, args.apr, args.cwidth,
         offset=offset, emissionlines=args.emissionlines, dwl=dwl, vel_z=vel_z,
-        telluriclines=args.telluriclines, twidth=twidth,
+        telluriclines=args.telluriclines, bwidth=bwidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
         overwrite=args.overwrite, verbose=verbose, debug=args.debug)
