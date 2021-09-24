@@ -379,55 +379,155 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         offset=5, wave=None, spec=None, emissionlines=None, dwl=1.0, vel_z=0.0,
         telluriclines=None, bwidth=3.0,
         commentslines=None, overwrite=False, verbose=0, debug=False):
-    """astro-d11: astronomical spectrum datacube continuum subtraction
+    """astro-d11: astronomical spectrum data cube continuum subtraction
     filter
 
-    The filter works as follows.
+    Apply a Differential Emission Line Filter (DELF) to an astronomical
+    spectrum data cube.
 
-    A datacube with astronomical spectra is assumed to be provided in a
-    file that is saved in the FITS format. Where two axes are spatial
-    and a third is spectral.
+    *Background*
 
-    The user specifies a quadratic region where there is little
-    disturbance and few features; this is done using the first two
-    arguments (x and y [pixel] coordinates) and the half-side (apr, also
-    a pixel value). The flux in the region is summed up to create a
-    reference spectrum using all layers (pixels on the wavelength axis)
-    in the datacube.
+    The usual approach to find point sources such as planetary nebulæ
+    (PNe) in astronomical observations has been to observe the object
+    region using imaging techniques. In that approach, the region is
+    observed both on-band and off-band using narrow bandpass filters; a
+    comparison between the two images reveals objects such as PNe. Such
+    an approach can work with PNe as they emit nearly all their
+    intensity in a few emission lines; where the forbidden emission line
+    of oxygen, [OIII]5007, is typically the strongest one.
 
-    A new datacube is constructed layer by layer, where a continuum
-    image is created for each layer individually based on two regions
-    offset (--offset) towards lower and higher pixels of the current
-    layer. The total width of the continuum regions is set using the
-    fourth argument (cwidth, the width is specified in Angstrom). The
-    continuum image is at first normalized (corrected) with the
-    corresponding continuum regions of the reference spectrum.
-    Thereafter, the normalized continuum image is subtracted from the
-    current layer image.
+    Astro-d11 (DELF) presents an alternative approach where a data cube
+    based on integral-field spectroscopy observations provides means to
+    use two very narrow bandpasses near the emission line when
+    subracting the background signal. In comparison to the imaging
+    approach, the narrow "filters" represented by the bandpasses should
+    make it possible to detect fainter objects!
 
-    Creating the continuum image and continuum reference spectrum for
-    each layer, the two continuum regions are offset towards either
-    lower or higher pixels until no telluric line falls within the
-    respective region. Telluric line wavelengths are read from a
-    plain-text file (--telluriclines) that provides a wavelength value per
-    line. The full width of any individual telluric line region can be
-    set (--bwidth).
+    The algorithm is first described in the paper mentioned in the Links
+     section below.
+
+
+    *Method*
+
+    Two narrow bandpasses, a blue and a red bandpass, are offset from
+    the current wavelength (layer) towards bluer (lower) and redder
+    (higher) pixels, beginning at an initial offset (//offset//). The
+    total width of the red and blue bandpasses is set using the
+    parameter //cwidth//; either bandpass is skipped for the bluest
+    (lowest) and reddest (highest) pixels. The initially offset
+    bandpasses are thereafter shifted away from the layer as needed in
+    such a way that telluric and [optionally also] emission lines are
+    avoided. Additionally, the subtracted continuum value is normalized
+    with a reference spectrum of a pre-selected aperture with few
+    emission-line features, using the same bandpasses. The location and
+    size of the reference aperture must be set using the parameters
+    //x//, //y//, and //apr//.
+
+    The reference spectrum (/rspec/) and its continuum bandpasses
+    (/rspec_blue/ and /rspec_red/) are defined with /n_blue/ and /n_red/
+    layers in the blue and red bandpasses, respectively. Likewise, the
+    flux and continuum bandpasses of each spatial element are defined
+    with /img/, /img_blue/, and /img_red/, respectively; using the same
+    bandpasses as the reference spectrum! The continuum is then
+    subtracted from the input data cube for the current layer /i/ using
+    the following equation:
+
+    corr_factor[i] = rspec[i] / \
+     ((sum(rspec_blue[i])/n_blue[i] + sum(rspec_red[i])/n_red[i])/2)
+    out[i] = img[i] - corr_factor[i] * \
+      (sum(img_blue[i])/n_blue[i] + sum(img_red[i])/n_red[i])/2
+
+
+    *Telluric lines*
+
+    The list of telluric lines is specified using the parameter
+    //telluriclines//, which needs to be set to the name of a plain-text
+    file where each line contains the wavelength of a telluric line in
+    the first column (the unit is Angstrom, Å); the default line list
+    file is 'telluric_lines_hires.dat', which is available in the 'data'
+    directory. The bandpass width can be adjusted using the parameter
+    //bwidth// [Angstrom], where the default value is 3.0 Å.
+
+
+    *Emission lines*
+
+    The list of emission lines is specified using the parameter
+    //emissionlines//, which needs to be set to the name of a plain-text
+    file where each line contains the wavelength of an emission line in
+    the first column (the unit is Angstrom, Å); a default line list file
+    is provided in 'emission_lines-ground_based-noFe.dat', which is also
+    available in the 'data' directory.
+
+    The procedure is to create a spatially dependent emission-line mask
+    by looping through all spatial elements and emission-line entries.
+    For this purpose, the emission line redshift can be set using the
+    parameter //vel_z// (unit km/s; default is 0 km/s), and an
+    additional permitted offset is specified using the parameter //dwl//
+    (unit Angstrom; default is 1.0 Å). For each spatial element and
+    emission line, a section of the object spectrum is fitted using the
+    tool __mpfit.py__ (see link below). A fitted line results in the
+    bandpass centered on the wavelength to be masked. The emission line
+    bandpass width is set using the parameter //bwidth// [Angstrom],
+    where the default width is 3.0 Å.
+
+    Please Note! The fitting procedure of individual emission lines is
+    slow. So it might be a wise idea to begin with a small number of
+    emission lines in the list to see that everything works properly
+    before increasing the number.
+
+
+    *Resulting image*
 
     The filtered image is written to a file, adding a set of header
-    keywords that indicate waht argument values were used ("d11_x",
-    "d11_y", "d11_apr", and "d11_cwid") for (x, y, apr, cwidth). The
-    output filename can be set explicitly (using --ofilename), but
-    otherwise the input filename is used with the added suffix "_d11".
+    keywords that indicate waht argument values were used (//d11_x//,
+    //d11_y//, //d11_apr//, and //d11_cwid//) for the parameters
+    //x, y, apr, cwidth//. The output filename can be set explicitly
+    using  the parameter //ofilename), otherwise the input filename is
+    used with the added suffix '_d11'.
+
+
+    *Links*
+
+    The filter is described in the paper "Toward Precision Cosmology
+    with Improved PNLF Distances Using VLT-MUSE I. Methodology and
+    Tests", Martin M. Roth, George H. Jacoby, Robin Ciardullo,
+    Brian D. Davis, Owen Chase, and Peter M. Weilbacher 2021,
+    The Astrophysical Journal (ApJ), 916, 21, 44 pp.
+
+      https://iopscience.iop.org/journal/0004-637X
+
+    PDF file:
+      https://ui.adsabs.harvard.edu/link_gateway/2021ApJ...916...21R/PUB_PDF
+
+    ApJ abstract page:
+      https://www.doi.org/10.3847/1538-4357/ac02ca
+
+    NASA ADS:
+      https://ui.adsabs.harvard.edu/abs/2021ApJ...916...21R/abstract
+
+
+    This tool is also available in the integral-field spectroscopy
+    data-reduction package p3d, which is available at
+
+      https://p3d.sourceforge.io
+
+    where the DELF-tool is named *p3d_d11*. While p3d is written
+    using the Interactive Data Language (IDL), it can be used without a
+    license using the IDL Virtual Machine.
+
+
+    *Calling sequence*
 
     The program is used with the following keywords and options:
 
-    d11.py <file> x y apr cwidth [-f] [-t <file>] [-q <value>] \
-        [-u <char>] [-o <file>] [-w] [-v <int>]
+    d11.py <file> x y apr cwidth [-f] [-e <file>] [-d <value>] \
+        [-z <value>] [-t <file>] [-b <value>] [-u <char>] \
+        [-o <file>] [-w] [-v <int>]
 
     <file>:
       The name of the data cube file. The file needs to be stored using
       the FITS format. An attempt is made at locating the dispersion
-      axis in the datacube using the CTYPEx header keywords (x is an
+      axis in the data cube using the CTYPEx header keywords (x is an
       integer in the range 1-3), which needs to be set to either AWAV
       or WAVE.
 
@@ -435,18 +535,18 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
       The x-coordinate of the region that is used to create a reference
       spectrum. The value is specified in pixel units. There is no
       default as this value has to be chosen by identifying a region in
-      the datacube where there is little change.
+      the data cube where there is little change.
 
     y:
       The y-coordinate of the region that is used to create a reference
       spectrum. The value is specified in pixel units. There is no
       default as this value has to be chosen by identifying a region in
-      the datacube where there is little change.
+      the data cube where there is little change.
 
     apr:
       The reference spectrum region half-width. The value is specified
       in pixel units. There is no default as this value has to be chosen
-      by identifying a region in the datacube where there is little
+      by identifying a region in the data cube where there is little
       change.
 
     cwidth:
@@ -467,9 +567,9 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
       calculation of the continuum regions. Red and blue shifted
       emission lines are identified by fitting a Gaussian profile to a
       potentially existing emission line, assuming a redshift set using
-      the parameter --vel_z while allowing an offset from that value
-      (--dwl). The wavelength unit is Angstrom. The default value is:
-      "emission_lines-ground_based-noFe.dat".
+      the parameter //vel_z// while allowing an offset from that value
+      (//dwl//). The wavelength unit is Angstrom. The default value is:
+      'data/emission_lines-ground_based-noFe.dat'.
 
     [-d] or [--dwl]:
       A value that defines a maximum allowed deviation from the provided
@@ -485,7 +585,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
       The name of a plain-text file that lists wavelengths of telluric
       lines that should be excluded in the calculation of the
       continuum regions. The wavelength unit is Angstrom. The default
-      value is: "data/telluric_lines_hires.dat".
+      value is: 'data/telluric_lines_hires.dat'.
 
     [-b] or [--bwidth]:
       The bandwidth of bandpasses to ignore centered on telluric and
@@ -494,11 +594,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
     [-u] or [--commentslines]:
       Specify a character that identifies lines with comments in the
-      telluric line-list file. The default value is "#".
+      telluric line-list file. The default value is '#'.
 
     [-o] or [--ofilename]:
       The name of the resulting filtered file is usually the same as the
-      input file, with the added suffix "_d11". Use this keyword to
+      input file, with the added suffix '_d11'. Use this keyword to
       provide an own filename.
 
     [-w] or [--overwrite]:
@@ -531,7 +631,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
     screxe = screxe[0:screxe.find(".")] + ": "
 
     # Check that the filename argument contains the name of an existing
-    # FITS file with a datacube.
+    # FITS file with a data cube.
 
     if not isinstance(filename, str):
         msg = screxe + "<filename>,  the first argument, must be a " \
@@ -540,7 +640,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
     if not os.path.isfile(filename):
         msg = screxe + "<filename> must contain the name of an existing FITS" \
-            "-type file with a datacube."
+            "-type file with a data cube."
         raise RuntimeError(msg)
 
     if ofilename is None:
@@ -639,7 +739,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         logging.basicConfig(filename=logfile, format="%(asctime)s %(message)s",
                             level=logging.DEBUG)
         log_str = [screxe + "Apply a differential emission line filter (DELF" \
-                   ") on an astronomical datacube.", \
+                   ") on an astronomical data cube.", \
                    screxe + "The tool was run using the following options:", \
                    screxe + "  filename = \"" + filename + "\"", \
                    screxe + "  x = " + str(x), \
@@ -669,7 +769,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
             pass
     except OSError:
         log_str = screxe + "<filename> must contain the name of an existing " \
-            "FITS-type file with a datacube."
+            "FITS-type file with a data cube."
         print(log_str)
         if verbose >= 1: logging.error(log_str)
         raise RuntimeError(log_str)
@@ -683,7 +783,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
         if hdr1["naxis"] != 3:
             log_str = screxe + "<filename> must contain the name of an exist" \
-                "ing FITS-type file with a datacube."
+                "ing FITS-type file with a data cube."
             print(log_str)
             if verbose >= 1: logging.error(log_str)
             raise RuntimeError(log_str)
@@ -970,7 +1070,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
 
 
         # Step through the cube on the dispersion axis and subtract scaled
-        # blue and red continuum bands from the datacube bins.
+        # blue and red continuum bands from the data cube bins.
 
         nwidth = len(str(nwave))
         dwidth = len(str(dwave))
@@ -1044,8 +1144,8 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         # Add data processing header entries and write a file with the
         # resulting data.
 
-        hdr1["history"] = "d11: datacube processed with d11 to subtract the " \
-            "continuum"
+        hdr1["history"] = "d11: data cube processed with d11 to subtract the" \
+            " continuum"
         hdr1["history"] = "d11: time of processing: " + time.asctime()
         hdr1["d11_x"] = (x, "d11: ap. center x coord. for continuum template")
         hdr1["d11_y"] = (y, "d11: ap. center y coord. for continuum template")
