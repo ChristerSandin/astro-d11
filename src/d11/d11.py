@@ -299,7 +299,7 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
             img = img_i
         else:
             corr_fac = spec[i]*nr/I_red
-            img = img_i - corr_fac*nr/img_red
+            img = img_i - corr_fac*img_red/nr
         msg1 = "corrected using red band."
         msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
             "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
@@ -319,7 +319,7 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
             img = img_i
         else:
             corr_fac = spec[i]*nb/I_blue
-            img = img_i - corr_fac*nb/img_blue
+            img = img_i - corr_fac*img_blue/nb
         msg1 = "corrected using blue band."
         msg2 = "blue band: {0:{width}}:{1:{width}} [px] " \
             "(n = {2:{dwidth}}), red band: {3:{width}}:{4:{width}}" \
