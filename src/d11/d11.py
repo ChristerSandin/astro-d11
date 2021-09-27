@@ -128,7 +128,8 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
 
 
 def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
-              xstr="", verbose=None, debug=False, contall=False):
+              fit_intensity_limit=0.0, xstr="", verbose=None,
+              debug=False, contall=False):
 
     from mpfit import mpfit
     from d11_mpfit_f import d11_mpfit_f
@@ -213,7 +214,7 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
     # Need to determine if the fit is good...this could be improved
     ok_fit = m.nfev > 1 and m.status > 0 and \
         m.params[3] > sigma_min and \
-        m.params[3] < sigma_max and m.params[4] > 0.0
+        m.params[3] < sigma_max and m.params[4] > fit_intensity_limit
 
 
     # Debugging: plot diagnostic properties.
@@ -377,8 +378,9 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
 
 def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         spec=None, emissionlines=None, noemissionlines=None, dwl=1.0,
-        vel_z=0.0, telluriclines=None, bwidth=3.0,
-        commentslines=None, overwrite=False, verbose=0, debug=False):
+        vel_z=0.0, fit_intensity_limit=fit_intensity_limit, telluriclines=None,
+        bwidth=3.0, commentslines=None, overwrite=False,
+        verbose=0, debug=False):
     """astro-d11: astronomical spectrum data cube continuum subtraction
     filter
 
@@ -556,12 +558,12 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
       units (Angstrom). There is no default as this value has to be
       chosen depending on the data.
 
-    [-f] or [--offset]:
+    offset <value>:
       The initial offset towards lower and higher pixels when defining
       the continuum image is set using this keyword. The unit is pixels,
       and the default value is 5 pixels.
 
-    [-e] or [--emissionlines]:
+    emissionlines <string>:
       The name of a plain-text file that lists wavelengths of
       possibly redshifted emission lines that should be excluded in the
       calculation of the continuum regions. Red and blue shifted
@@ -571,50 +573,54 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
       (//dwl//). The wavelength unit is Angstrom. The default value is:
       'data/emission_lines-ground_based-noFe.dat'.
 
-    [-n] or [--noemissionlines]
+    noemissionlines:
       Do not use the default emission-line file and do not fit any
       emission lines.
 
-    [-d] or [--dwl]:
+    dwl <value>:
       A value that defines a maximum allowed deviation from the provided
       center wavelengths of emission lines. The unit is Ångström [Å].
 
-    [-z] or [--vel_z]:
+    vel_z <value>:
       A scalar value that specifies the redshift of all regular emission
       lines as a velocity. The unit assumed is km/s. The redshift is
       recovered using the equation (where c is the light speed):
         z = sqrt((1 + vel_z / c) / (1 - vel_z / c)) - 1
 
-    [-t] or [--telluriclines]:
+    fit_intensity_limit:
+      A scalar decimal value that defines a lower limit value on the
+      fitted emission line intensity for the fit to be considered OK.
+
+    telluriclines <string>:
       The name of a plain-text file that lists wavelengths of telluric
       lines that should be excluded in the calculation of the
       continuum regions. The wavelength unit is Angstrom. The default
       value is: 'data/telluric_lines_hires.dat'.
 
-    [-b] or [--bwidth]:
+    bwidth <value>:
       The bandwidth of bandpasses to ignore centered on telluric and
       emission lines. The value is specified in wavelength units
       (Angstrom). The default value is 3.0 Å.
 
-    [-u] or [--commentslines]:
+    commentslines <string>:
       Specify a character that identifies lines with comments in the
       telluric line-list file. The default value is '#'.
 
-    [-o] or [--ofilename]:
+    ofilename <string>:
       The name of the resulting filtered file is usually the same as the
       input file, with the added suffix '_d11'. Use this keyword to
       provide an own filename.
 
-    [-w] or [--overwrite]:
+    overwrite:
       Any existing file with the same name as the output file will not
       be overwritten unless this keyword is used to overwrite the file.
 
-    [-v] or [--verbose]:
+    verbose <value>:
       An integer that specifies the verbosity of the filter processing.
       The default is to show no information (0). Set the verbosity to
       1 (some information) or 2 (all information).
 
-    [-h] or [--help]:
+    help
       Show this information and exit.
 
 
@@ -717,6 +723,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         vel_z *= 1e5  # km/s => cm/s
         z = np.sqrt((1.0 + vel_z / clight) / (1.0 - vel_z / clight)) - 1.0
 
+        if not is_instance(fit_intensity_limit, float):
+            msg = screxe + "<fit_intensity_limit> must be set to a decimal v" \
+                "alue; fit_intensity_limit >= 0."
+            raise RuntimeError(msg)
 
     use_telluriclines = False
     if telluriclines is not None and isinstance(telluriclines, str):
@@ -756,21 +766,25 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         log_str = [screxe + "Apply a differential emission line filter (DELF" \
                    ") on an astronomical data cube.", \
                    screxe + "The tool was run using the following options:", \
-                   screxe + "  filename = \"" + filename + "\"", \
-                   screxe + "  x = " + str(x), \
-                   screxe + "  y = " + str(y), \
-                   screxe + "  apr = " + str(apr), \
-                   screxe + "  cwidth = " + str(cwidth), \
-                   screxe + "  bwidth = " + str(bwidth), \
-                   screxe + "  offset = " + str(offset)]
+                   screxe + "            filename = \"" + filename + \
+                   "\"", \
+                   screxe + "                   x = " + str(x), \
+                   screxe + "                   y = " + str(y), \
+                   screxe + "                 apr = " + str(apr), \
+                   screxe + "              cwidth = " + str(cwidth), \
+                   screxe + "              bwidth = " + str(bwidth), \
+                   screxe + "              offset = " + str(offset)]
         if use_telluriclines or use_emissionlines:
-            log_str.append(screxe + "  commentslines = \"" + comments + "\"")
+            log_str.append(screxe + "       commentslines = \"" + \
+                           comments + "\"")
         if use_emissionlines:
             log_str = [log_str, \
-                       screxe + "  emissionlines = \"" + emissionlines + \
+                       screxe + "       emissionlines = \"" + emissionlines + \
                        "\"", \
-                       screxe + "  dwl = " + str(dwl), \
-                       screxe + "  vel_z = " + str(vel_z)]
+                       screxe + "                 dwl = " + str(dwl), \
+                       screxe + "               vel_z = " + str(vel_z), \
+                       screxe + " fit_intensity_limit = " + \
+                       str(fit_intensity_limit)]
         if use_telluriclines:
             log_str.append(screxe + \
                            "  telluriclines = \"" + telluriclines + "\"")
@@ -1055,7 +1069,9 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
                     (w_i, ok_fit, error) = \
                         d11_mpfit(w_init, dwl, cdisp, x=x_sec, y=spec_sec, \
-                                  w_too=w_too, xstr=xstr, verbose=verbose, \
+                                  w_too=w_too, \
+                                  fit_intensity_limit=fit_intensity_limit, \
+                                  xstr=xstr, verbose=verbose, \
                                   debug=debug, contall=contall)
                     if error != 0: return
 
@@ -1221,6 +1237,10 @@ if __name__ == "__main__":
     parser.add_argument("-z", "--vel_z", action="store", type=float, \
                         help="A scalar value that specifies the redshift of " \
                         "emission lines [km/s].")
+    parser.add_argument("-l", "--fit_intensity_limit", action="store", \
+                        type=float, help="A scalar value that specifies the " \
+                        "lower limit of an acceptable fitted emission line i" \
+                        "nensity.")
     parser.add_argument("-t", "--telluriclines", action="store", type=str, \
                         help="Specifies the name of a plain-text file listin" \
                         "g telluric lines [Angstrom].")
@@ -1270,6 +1290,7 @@ if __name__ == "__main__":
     d11(args.filename, args.x, args.y, args.apr, args.cwidth,
         offset=offset, emissionlines=args.emissionlines,
         noemissionlines=args.noemissionlines, dwl=dwl, vel_z=vel_z,
+        fit_intensity_limit=args.fit_intensity_limit,
         telluriclines=args.telluriclines, bwidth=bwidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
         overwrite=args.overwrite, verbose=verbose, debug=args.debug)
