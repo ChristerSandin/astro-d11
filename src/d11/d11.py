@@ -223,7 +223,7 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
         pass
         # Could include this...or not
 
-    return (m.params[2], ok_fit, error)
+    return (m.params[2], ok_fit, m.params[4], error)
 
 
 def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
@@ -378,7 +378,7 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
 
 def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         spec=None, emissionlines=None, noemissionlines=None, dwl=1.0,
-        vel_z=0.0, fit_intensity_limit=fit_intensity_limit, telluriclines=None,
+        vel_z=0.0, fit_intensity_limit=0.0, telluriclines=None,
         bwidth=3.0, commentslines=None, overwrite=False,
         verbose=0, debug=False):
     """astro-d11: astronomical spectrum data cube continuum subtraction
@@ -710,7 +710,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
     if use_emissionlines:
         elines = np.loadtxt(emissionlines, comments=comments, usecols=(0))
-
+        print(elines)
         if not isinstance(dwl, float):
             msg = screxe + "<dwl> must be set to a decimal value (Angstrom)."
             raise RuntimeError(msg)
@@ -723,7 +723,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         vel_z *= 1e5  # km/s => cm/s
         z = np.sqrt((1.0 + vel_z / clight) / (1.0 - vel_z / clight)) - 1.0
 
-        if not is_instance(fit_intensity_limit, float):
+        if not isinstance(fit_intensity_limit, float):
             msg = screxe + "<fit_intensity_limit> must be set to a decimal v" \
                 "alue; fit_intensity_limit >= 0."
             raise RuntimeError(msg)
@@ -787,8 +787,8 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                        str(fit_intensity_limit)]
         if use_telluriclines:
             log_str.append(screxe + \
-                           "  telluriclines = \"" + telluriclines + "\"")
-        log_str.append(screxe + "  ofilename = \"" + ofilename + "\"")
+                           "       telluriclines = \"" + telluriclines + "\"")
+        log_str.append(screxe + "           ofilename = \"" + ofilename + "\"")
         for log_str_i in log_str:
             print(log_str_i)
             logging.info(log_str_i)
@@ -965,7 +965,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                         str(iy + 1).rjust(nwidth) + "] / [" + \
                                  str(xsize).rjust(nwidth) + ", " + \
                                  str(ysize).rjust(nwidth) + \
-                        "] :: There were no finite pixels in the " \
+                        "] :: There were no finite pixels at all in the " \
                         "spectrum - skip."
                     print(log_str)
                     logging.info(log_str)
@@ -1067,7 +1067,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     xstr = str(ix + 1) + ", " + str(iy + 1) + ", " + \
                         str(elines[i])
 
-                    (w_i, ok_fit, error) = \
+                    (w_i, ok_fit, ok_intensity, error) = \
                         d11_mpfit(w_init, dwl, cdisp, x=x_sec, y=spec_sec, \
                                   w_too=w_too, \
                                   fit_intensity_limit=fit_intensity_limit, \
@@ -1076,6 +1076,19 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     if error != 0: return
 
                     if e_count > 0: del w_too
+
+                    if verbose >=3:
+                        ok_str = "yes, intensity = " + str(ok_intensity) \
+                            if ok_fit else "no"
+                        log_str = screxe + "Spectrum [" + \
+                            str(ix + 1).rjust(nwidth) + ", " + \
+                            str(iy + 1).rjust(nwidth) + "] / [" + \
+                            str(xsize).rjust(nwidth) + ", " + \
+                            str(ysize).rjust(nwidth) + "] :: Line fit was ok" \
+                            ": " + ok_str
+                        print(log_str)
+                        logging.info(log_str)
+                        del log_str
 
                     if ok_fit:
                         w_i__low = math.floor(w_i - twave)
