@@ -375,9 +375,9 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
     return img
 
 
-def d11(filename, x, y, apr, cwidth, ofilename=None,
-        offset=5, wave=None, spec=None, emissionlines=None, dwl=1.0, vel_z=0.0,
-        telluriclines=None, bwidth=3.0,
+def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
+        spec=None, emissionlines=None, noemissionlines=None, dwl=1.0,
+        vel_z=0.0, telluriclines=None, bwidth=3.0,
         commentslines=None, overwrite=False, verbose=0, debug=False):
     """astro-d11: astronomical spectrum data cube continuum subtraction
     filter
@@ -571,6 +571,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
       (//dwl//). The wavelength unit is Angstrom. The default value is:
       'data/emission_lines-ground_based-noFe.dat'.
 
+    [-n] or [--noemissionlines]
+      Do not use the default emission-line file and do not fit any
+      emission lines.
+
     [-d] or [--dwl]:
       A value that defines a maximum allowed deviation from the provided
       center wavelengths of emission lines. The unit is Ångström [Å].
@@ -674,20 +678,29 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
         comments = commentslines
 
     use_emissionlines = False
-    if emissionlines is not None and isinstance(emissionlines, str):
-        if not os.path.isfile(emissionlines):
-            msg = screxe + "<emissionlines> must contain the name of an exis" \
-                "ting plain-text file listing emission lines (Angstrom)."
-            raise RuntimeError(msg)
+    skip_emissionlines = False
+    if noemissionlines is not None:
+        if noemissionlines: skip_emissionlines = True
 
-        use_emissionlines = True
-    else:
-        exefile = inspect.getabsfile(inspect.currentframe())
-        path = Path(exefile)
-        path = path.parent.parent.parent.absolute()
-        emissionlines = os.path.join(path, "data",
+    if not skip_emissionlines:
+        if emissionlines is not None and isinstance(emissionlines, str):
+            if not os.path.isfile(emissionlines):
+                msg = screxe + "<emissionlines> must contain the name of an " \
+                    "existing plain-text file listing emission lines (Angstr" \
+                    "om)."
+                raise RuntimeError(msg)
+
+            use_emissionlines = True
+        else:
+            exefile = inspect.getabsfile(inspect.currentframe())
+            path = Path(exefile)
+            del exefile
+            path = path.parent.parent.parent.absolute()
+            emissionlines = os.path.join(path, "data",
                                      "emission_lines-ground_based-noFe.dat")
-        use_emissionlines = True
+            use_emissionlines = True
+            del path
+    del skip_emissionlines
 
     if use_emissionlines:
         elines = np.loadtxt(emissionlines, comments=comments, usecols=(0))
@@ -716,9 +729,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None,
     else:
         exefile = inspect.getabsfile(inspect.currentframe())
         path = Path(exefile)
+        del exefile
         path = path.parent.parent.parent.absolute()
         telluriclines = os.path.join(path, "data", "telluric_lines_hires.dat")
         use_telluriclines = True
+        del path
 
     if use_telluriclines:
         tlines = np.loadtxt(telluriclines, comments=comments, usecols=(0))
@@ -1197,6 +1212,8 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--emissionlines", action="store", type=str, \
                         help="Specifies the name of a plain-text file listin" \
                         "g [possibly] redshifted emission lines [Angstrom].")
+    parser.add_argument("-n", "--noemissionlines", action="store_true", \
+                        help="Do not fit any emission lines.")
     parser.add_argument("-d", "--dwl", action="store", type=float, \
                         help="A scalar value that specifies the allowed devi" \
                         "ation of each fitted line from specified line cente" \
@@ -1251,7 +1268,8 @@ if __name__ == "__main__":
         verbose = 0
 
     d11(args.filename, args.x, args.y, args.apr, args.cwidth,
-        offset=offset, emissionlines=args.emissionlines, dwl=dwl, vel_z=vel_z,
+        offset=offset, emissionlines=args.emissionlines,
+        noemissionlines=args.noemissionlines, dwl=dwl, vel_z=vel_z,
         telluriclines=args.telluriclines, bwidth=bwidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
         overwrite=args.overwrite, verbose=verbose, debug=args.debug)
