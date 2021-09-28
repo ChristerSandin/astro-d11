@@ -34,12 +34,14 @@ The list of telluric lines is specified using the parameter `telluriclines`, whi
 
 The list of emission lines is specified using the parameter `emissionlines`, which needs to be set to the name of a plain-text file where each line contains the wavelength of an emission line in the first column (the unit is Angstrom, Å); a default line list file is provided in *emission_lines-ground_based-noFe.dat*, which is also available in the *data* directory.
 
-The procedure is to create a spatially dependent emission-line mask by looping through all spatial elements and emission-line entries. For this purpose, the emission line redshift can be set using the parameter `vel_z` (unit km/s; default is 0 km/s), and an additional permitted offset is specified using the parameter `dwl` (unit Angstrom; default is 1.0 Å). For each spatial element and emission line, a section of the object spectrum is fitted using the tool __mpfit.py__ (see link below). A fitted line results in the bandpass centered on the wavelength to be masked. The emission line bandpass width is set using the parameter `bwidth` [Angstrom], where the default width is 3.0 Å.
+The procedure is to create a spatially dependent emission-line mask by looping through all spatial elements and emission-line entries. For this purpose, and to save execution time, the data can be binned on the spatial axes to create spectra with higher signal-to-noise before the fitting. See the parameter `bin`.
+
+The emission line redshift can be set using the parameter `vel_z` (unit km/s; default is 0 km/s), and an additional permitted offset is specified using the parameter `dwl` (unit Angstrom; default is 1.0 Å). For each spatial element and emission line, a section of the object spectrum is fitted using the tool __mpfit.py__ (see link below). A fitted line results in the bandpass centered on the wavelength to be masked. The emission line bandpass width is set using the parameter `bwidth` [Angstrom], where the default width is 3.0 Å.
 
 Please Note! The fitting procedure of individual emission lines is slow. So it might be a wise idea to begin with a small number of emission lines in the list to see that everything works properly before increasing the number.
 
 
-### Resukting Image
+### Resulting Image
 
 The filtered image is written to a file, adding a set of header keywords that indicate waht argument values were used (`d11_x`, `d11_y`, `d11_apr`, and `d11_cwid`) for the parameters `x, y, apr, cwidth`. The output filename can be set explicitly using the parameter `ofilename`), otherwise the input filename is used with the added suffix *_d11*.
 
