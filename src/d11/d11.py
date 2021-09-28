@@ -466,15 +466,19 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
     The procedure is to create a spatially dependent emission-line mask
     by looping through all spatial elements and emission-line entries.
-    For this purpose, the emission line redshift can be set using the
-    parameter //vel_z// (unit km/s; default is 0 km/s), and an
-    additional permitted offset is specified using the parameter //dwl//
-    (unit Angstrom; default is 1.0 Å). For each spatial element and
-    emission line, a section of the object spectrum is fitted using the
-    tool __mpfit.py__ (see link below). A fitted line results in the
-    bandpass centered on the wavelength to be masked. The emission line
-    bandpass width is set using the parameter //bwidth// [Angstrom],
-    where the default width is 3.0 Å.
+    For this purpose, and to save execution time, the data can be binned
+    on the spatial axes to create spectra with higher signal-to-noise
+    before the fitting. See the parameter //bin//.
+
+    The emission line redshift can be set using the parameter //vel_z//
+    (unit km/s; default is 0 km/s), and an additional permitted offset
+    is specified using the parameter //dwl// (unit Angstrom; default is
+    1.0 Å). For each spatial element and emission line, a section of the
+    object spectrum is fitted using the tool __mpfit.py__ (see link
+    below). A fitted line results in the bandpass centered on the
+    wavelength to be masked. The emission line bandpass width is set
+    using the parameter //bwidth// [Angstrom], where the default width
+    is 3.0 Å.
 
     Please Note! The fitting procedure of individual emission lines is
     slow. So it might be a wise idea to begin with a small number of
@@ -600,6 +604,16 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
       ratio between the emission line flux at the line center and the
       continuum for the fit to be considered OK.
 
+    bin:
+      A scalar integer that is used to bin the input data on the spatial
+      axes before fitting emission lines. For example, if bin is set to
+      10, the spectra of ten spatial elements are summed together on
+      both spatial axes to form a binned spectrum out of 100 unbinned
+      spectra. In the case that the number of spatial elements on either
+      axis is not evenly divisible with the bin number, an additional
+      bin is added that contains as many spatial elements, counting from
+      the back.
+
     telluriclines <string>:
       The name of a plain-text file that lists wavelengths of telluric
       lines that should be excluded in the calculation of the
@@ -614,6 +628,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
     commentslines <string>:
       Specify a character that identifies lines with comments in the
       telluric line-list file. The default value is '#'.
+
+      Note! There appears to be a bug in numpy.loadtxt, which is why
+        this parameter cannot be used. The only comment character
+        accepted is '#'.
 
     ofilename <string>:
       The name of the resulting filtered file is usually the same as the
@@ -742,6 +760,14 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                 "ecimal value; fit_flux_continuum_fraction >= 0."
             raise RuntimeError(msg)
 
+        if not isinstance(bin, int):
+            msg = screxe + "<bin> must be set to an integer; bin >= 1."
+            raise RuntimeError(msg)
+
+        if bin <= 0:
+            msg = screxe + "<bin> must be set to an integer; bin >= 1."
+            raise RuntimeError(msg)
+
     use_telluriclines = False
     if telluriclines is not None and isinstance(telluriclines, str):
         if not os.path.isfile(telluriclines):
@@ -800,7 +826,8 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                        screxe + " fit_intensity_limit = " + \
                        str(fit_intensity_limit), \
                        screxe + " fit_flux_continuum_fraction = " + \
-                       str(fit_flux_continuum_fraction)]
+                       str(fit_flux_continuum_fraction), \
+                       screxe + "                 bin = " + str(bin)]
         if use_telluriclines:
             log_str.append(screxe + \
                            "       telluriclines = \"" + telluriclines + "\"")
@@ -868,7 +895,13 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
         xsize = hdr1["naxis" + str(axis_x)]
         ysize = hdr1["naxis" + str(axis_y)]
-        nwidth = max([len(str(xsize)), len(str(ysize))])
+
+        bxsize = xsize // bin
+        if xsize % bin != 0: bxsize = bxsize + 1
+        bysize = ysize // bin
+        if ysize % bin != 0: bysize = bysize + 1
+
+        nwidth = max([len(str(bxsize)), len(str(bysize))])
 
 
         # Setup a wavelength array.
@@ -952,35 +985,68 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         contall = 0
         if use_emissionlines:
 
-            x = np.arange(nwave, dtype=float)
+            xarr = np.arange(nwave, dtype=float)
             e_mask = np.zeros((nwave, xsize, ysize))
 
             twave = round(0.5*bwidth/cdisp)
 
             # Loop over all spatial elements.
-            for ixy in range(0, xsize * ysize):
+            for ixy in range(0, bxsize * bysize):
 
-                ix = ixy % xsize
-                iy = ixy // xsize
+                bix = ixy % bxsize
+                biy = ixy // bxsize
 
-                if axis_s == 1:
-                    xy_spec = data[iy, ix, :]
-                elif axis_s == 2:
-                    xy_spec = data[iy, :, ix]
+                if bin == 1:
+
+                    # Data are not binned.
+
+                    if axis_s == 1:
+                        xy_spec = data[iy, ix, :]
+                    elif axis_s == 2:
+                        xy_spec = data[iy, :, ix]
+                    else:
+                        xy_spec = data[:, iy, ix]
+
                 else:
-                    xy_spec = data[:, iy, ix]
 
+                    # Data are binned.
+
+                    if bix == bxsize - 1:
+                        ix_1 = xsize
+                        ix_0 = ix_1 - bin
+                    else:
+                        ix_0 = bix * bin
+                        ix_1 = ix_0 + bin
+
+                    if biy == bysize - 1:
+                        iy_1 = ysize
+                        iy_0 = iy_1 - bin
+                    else:
+                        iy_0 = biy * bin
+                        iy_1 = iy_0 + bin
+
+                    nq = (ix_1 - ix_0) * (iy_1 - iy_0)
+
+                    if axis_s == 1:
+                        xy_spec = np.sum(data[iy_0 : iy_1, ix_0 : ix_1, :],
+                                         axis=(0, 1))
+                    elif axis_s == 2:
+                        xy_spec = np.sum(data[iy_0 : iy_1, :, ix_0 : ix_1],
+                                         axis=(0, 2))
+                    else:
+                        xy_spec = np.sum(data[:, iy_0 : iy_1, ix_0 : ix_1],
+                                         axis=(1, 2))
 
                 # Check for NaN-element-only spectra and skip them.
 
                 count = np.argwhere(~np.isnan(xy_spec)).size/2
 
                 if count == 0:
-                    log_str = screxe + "Spectrum [" + \
-                        str(ix + 1).rjust(nwidth) + ", " + \
-                        str(iy + 1).rjust(nwidth) + "] / [" + \
-                                 str(xsize).rjust(nwidth) + ", " + \
-                                 str(ysize).rjust(nwidth) + \
+                    log_str = screxe + "Spectrum bin [" + \
+                        str(bix + 1).rjust(nwidth) + ", " + \
+                        str(biy + 1).rjust(nwidth) + "] / [" + \
+                                 str(bxsize).rjust(nwidth) + ", " + \
+                                 str(bysize).rjust(nwidth) + \
                         "] :: There were no finite pixels at all in the " \
                         "spectrum - skip."
                     print(log_str)
@@ -1045,7 +1111,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     if x__low + 1 >= x__high: continue
 
                     # Extract the spectrum part around the wavelength.
-                    x_sec = x[x__low : x__high]
+                    x_sec = xarr[x__low : x__high]
                     spec_sec = xy_spec[x__low : x__high]
 
 
@@ -1058,11 +1124,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     if nan_count > 0 or count < 7:
                         log_st = "no"
                         if count >  0: log_st = "only " + str(count)
-                        log_str = screxe + "Spectrum [" + \
-                            str(ix + 1).rjust(nwidth) + ", " + \
-                            str(iy + 1).rjust(nwidth) + "] / [" + \
-                            str(xsize).rjust(nwidth) + ", " + \
-                            str(ysize).rjust(nwidth) + "] :: There were " + \
+                        log_str = screxe + "Spectrum bin [" + \
+                            str(bix + 1).rjust(nwidth) + ", " + \
+                            str(biy + 1).rjust(nwidth) + "] / [" + \
+                            str(bxsize).rjust(nwidth) + ", " + \
+                            str(bysize).rjust(nwidth) + "] :: There were " + \
                             log_st + " finite pixels in the spectrum - skip."
                         print(log_str)
                         logging.info(log_str)
@@ -1080,7 +1146,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     #==============================--------------------
                     # Fit the emission line.
 
-                    xstr = str(ix + 1) + ", " + str(iy + 1) + ", " + \
+                    xstr = str(bix + 1) + ", " + str(biy + 1) + ", " + \
                         str(elines[i])
 
                     (w_i, ok_fit, ok_intensity, error) = \
@@ -1098,12 +1164,12 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     if verbose >=3:
                         ok_str = "yes, intensity = " + str(ok_intensity) \
                             if ok_fit else "no"
-                        log_str = screxe + "Spectrum [" + \
-                            str(ix + 1).rjust(nwidth) + ", " + \
-                            str(iy + 1).rjust(nwidth) + "] / [" + \
-                            str(xsize).rjust(nwidth) + ", " + \
-                            str(ysize).rjust(nwidth) + "] :: Line fit was ok" \
-                            ": " + ok_str
+                        log_str = screxe + "Spectrum bin [" + \
+                            str(bix + 1).rjust(nwidth) + ", " + \
+                            str(biy + 1).rjust(nwidth) + "] / [" + \
+                            str(bxsize).rjust(nwidth) + ", " + \
+                            str(bysize).rjust(nwidth) + "] :: Line fit was o" \
+                            "k: " + ok_str
                         print(log_str)
                         logging.info(log_str)
                         del log_str
@@ -1118,7 +1184,12 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                         if w_i__high > nwave: w_i__high = nwave
 
                         if w_i__high - w_i__low > 1:
-                           e_mask[w_i__low : w_i__high, ix, iy] = i
+                            if bin == 1:
+                                e_mask[w_i__low : w_i__high, ix, iy] = i
+                            else:
+                                e_mask[w_i__low : w_i__high, \
+                                       ix_0 : ix_1, iy_0 : iy_1] = i
+
 
 
         # Sum the flux in the selected aperture for all layers.
@@ -1277,6 +1348,10 @@ if __name__ == "__main__":
                         "t defines a lower limit on the ratio between the em" \
                         "ission line flux at the line center and the continu" \
                         "um for the fit to be considered OK")
+    parser.add_argument("-g", "--bin", action="store", type=int, \
+                        help="A scalar integer that bins this many elements " \
+                        "on both spatial axes in one bin before fitting emis" \
+                        "sion lines.")
     parser.add_argument("-t", "--telluriclines", action="store", type=str, \
                         help="Specifies the name of a plain-text file listin" \
                         "g telluric lines [Angstrom].")
@@ -1313,6 +1388,11 @@ if __name__ == "__main__":
     else:
         vel_z = 0.0
 
+    if arbs.bin is not None:
+        bin = args.bin
+    else:
+        bin = 1
+
     if args.bwidth is not None:
         bwidth = args.bwidth
     else:
@@ -1328,6 +1408,6 @@ if __name__ == "__main__":
         noemissionlines=args.noemissionlines, dwl=dwl, vel_z=vel_z,
         fit_intensity_limit=args.fit_intensity_limit,
         fit_flux_continuum_fraction=args.fit_flux_continuum_fraction,
-        telluriclines=args.telluriclines, bwidth=bwidth,
+        bin=bin, telluriclines=args.telluriclines, bwidth=bwidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
         overwrite=args.overwrite, verbose=verbose, debug=args.debug)
