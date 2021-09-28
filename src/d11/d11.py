@@ -128,8 +128,8 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
 
 
 def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
-              fit_intensity_limit=0.0, xstr="", verbose=None,
-              debug=False, contall=False):
+              fit_intensity_limit=0.0, fit_flux_continuum_fraction=0.0,
+              xstr="", verbose=None, debug=False, contall=False):
 
     from mpfit import mpfit
     from d11_mpfit_f import d11_mpfit_f
@@ -214,7 +214,10 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
     # Need to determine if the fit is good...this could be improved
     ok_fit = m.nfev > 1 and m.status > 0 and \
         m.params[3] > sigma_min and \
-        m.params[3] < sigma_max and m.params[4] > fit_intensity_limit
+        m.params[3] < sigma_max and \
+        m.params[4] > fit_intensity_limit and \
+        m.params[4]/(m.params[0]+m.params[1]*m.params[2]) > \
+        fit_flux_continuum_fraction
 
 
     # Debugging: plot diagnostic properties.
@@ -378,7 +381,8 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
 
 def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         spec=None, emissionlines=None, noemissionlines=None, dwl=1.0,
-        vel_z=0.0, fit_intensity_limit=0.0, telluriclines=None,
+        vel_z=0.0, fit_intensity_limit=0.0,
+        fit_flux_continuum_fraction=0.0, limit=0.0, telluriclines=None,
         bwidth=3.0, commentslines=None, overwrite=False,
         verbose=0, debug=False):
     """astro-d11: astronomical spectrum data cube continuum subtraction
@@ -591,6 +595,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
       A scalar decimal value that defines a lower limit value on the
       fitted emission line intensity for the fit to be considered OK.
 
+    fit_flux_continuum_fraction:
+      A scalar decimal value that defines a lower limit value on the
+      ratio between the emission line flux at the line center and the
+      continuum for the fit to be considered OK.
+
     telluriclines <string>:
       The name of a plain-text file that lists wavelengths of telluric
       lines that should be excluded in the calculation of the
@@ -728,6 +737,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                 "alue; fit_intensity_limit >= 0."
             raise RuntimeError(msg)
 
+        if not isinstance(fit_flux_continuum_fraction, float):
+            msg = screxe + "<fit_flux_continuum_fraction> must be set to a d" \
+                "ecimal value; fit_flux_continuum_fraction >= 0."
+            raise RuntimeError(msg)
+
     use_telluriclines = False
     if telluriclines is not None and isinstance(telluriclines, str):
         if not os.path.isfile(telluriclines):
@@ -784,7 +798,9 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                        screxe + "                 dwl = " + str(dwl), \
                        screxe + "               vel_z = " + str(vel_z), \
                        screxe + " fit_intensity_limit = " + \
-                       str(fit_intensity_limit)]
+                       str(fit_intensity_limit), \
+                       screxe + " fit_flux_continuum_fraction = " + \
+                       str(fit_flux_continuum_fraction)]
         if use_telluriclines:
             log_str.append(screxe + \
                            "       telluriclines = \"" + telluriclines + "\"")
@@ -1071,6 +1087,8 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                         d11_mpfit(w_init, dwl, cdisp, x=x_sec, y=spec_sec, \
                                   w_too=w_too, \
                                   fit_intensity_limit=fit_intensity_limit, \
+                                  fit_flux_continuum_fraction=\
+                                  fit_flux_continuum_fraction, \
                                   xstr=xstr, verbose=verbose, \
                                   debug=debug, contall=contall)
                     if error != 0: return
@@ -1254,6 +1272,11 @@ if __name__ == "__main__":
                         type=float, help="A scalar value that specifies the " \
                         "lower limit of an acceptable fitted emission line i" \
                         "nensity.")
+    parser.add_argument("-r", "--fit_flux_continuum_fraction", \
+                        action="store", type=float, help="A scalar value tha" \
+                        "t defines a lower limit on the ratio between the em" \
+                        "ission line flux at the line center and the continu" \
+                        "um for the fit to be considered OK")
     parser.add_argument("-t", "--telluriclines", action="store", type=str, \
                         help="Specifies the name of a plain-text file listin" \
                         "g telluric lines [Angstrom].")
@@ -1304,6 +1327,7 @@ if __name__ == "__main__":
         offset=offset, emissionlines=args.emissionlines,
         noemissionlines=args.noemissionlines, dwl=dwl, vel_z=vel_z,
         fit_intensity_limit=args.fit_intensity_limit,
+        fit_flux_continuum_fraction=args.fit_flux_continuum_fraction,
         telluriclines=args.telluriclines, bwidth=bwidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
         overwrite=args.overwrite, verbose=verbose, debug=args.debug)
