@@ -78,6 +78,9 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
                 if i_0 > N - 1: i_0 = N - 1
                 if i_1 > N: i_1 = N
                 if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
+
+                mtmask = max(tmask[i_0 : i_1])
+                memask = max(emask[i_0 : i_1])
         else:
             while max(tmask[i_0 : i_1]) > 0:
                 i_str = str(tmask[i_0]) + " (red)"
@@ -113,6 +116,9 @@ def d11_spec_sec(i_0, i_1, tmask, emask=None, pos=True):
                 if i_0 < 0: i_0 = 0
                 if i_1 < 1: i_1 = 1
                 if i_0 == i_1 - 1: return (i_0, i_1, "", 0)
+
+                mtmask = max(tmask[i_0 : i_1])
+                memask = max(emask[i_0 : i_1])
         else:
             while max(tmask[i_0 : i_1]) > 0:
                 i_str = str(tmask[i_1 - 1]) + " (blue)"
@@ -211,13 +217,16 @@ def d11_mpfit(w_init, dwl, cdisp, x=None, y=None, w_too=None,
     yfit = d11_mpfit_f(m.params, x=x, y=y, dy=dy, \
                        coff=coff, n_tied=n_tied, funceval=True)
 
+    yfit_p2 = d11_mpfit_f(m.params, x=m.params[2], y=0.0, dy=0.0, \
+                       coff=coff, n_tied=n_tied, funceval=True)
+
     # Need to determine if the fit is good...this could be improved
+    yfit_bg = (m.params[0] + m.params[1]*m.params[2])
     ok_fit = m.nfev > 1 and m.status > 0 and \
         m.params[3] > sigma_min and \
         m.params[3] < sigma_max and \
         m.params[4] > fit_intensity_limit and \
-        m.params[4]/(m.params[0]+m.params[1]*m.params[2]) > \
-        fit_flux_continuum_fraction
+        (yfit_p2-yfit_bg)/yfit_bg > fit_flux_continuum_fraction
 
 
     # Debugging: plot diagnostic properties.
@@ -272,6 +281,26 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
             if nr > 0: img_red  = np.sum(data[sr_0 : sr_1, :, :], axis=0)
             img_i = data[i, :, :]
 
+    elif len(ix) == 2 and len(iy) == 2:
+
+        if axis_s == 1:
+            if nb > 0: img_blue = \
+               np.sum(data[iy[0] : iy[1], ix[0] : ix[1], sb_0 : sb_1], axis=2)
+            if nr > 0: img_red  = \
+               np.sum(data[iy[0] : iy[1], ix[0] : ix[1], sr_0 : sr_1], axis=2)
+            img_i = data[iy[0] : iy[1], ix[0] : ix[1], i]
+        elif axis_s == 2:
+            if nb > 0: img_blue = \
+               np.sum(data[iy[0] : iy[1], sb_0 : sb_1, ix[0] : ix[1]], axis=1)
+            if nr > 0: img_red  = \
+               np.sum(data[iy[0] : iy[1], sr_0 : sr_1, ix[0] : ix[1]], axis=1)
+            img_i = data[iy[0] : iy[1], ix[0] : ix[1], :]
+        else:
+            if nb > 0: img_blue = \
+               np.sum(data[sb_0 : sb_1, iy[0] : iy[1], ix[0] : ix[1]], axis=0)
+            if nr > 0: img_red  = \
+               np.sum(data[sr_0 : sr_1, iy[0] : iy[1], ix[0] : ix[1]], axis=0)
+            img_i = data[i, iy[0] : iy[1], ix[0] : ix[1]]
     else:
 
         if axis_s == 1:
@@ -382,9 +411,9 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
 def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         spec=None, emissionlines=None, noemissionlines=None, dwl=1.0,
         vel_z=0.0, fit_intensity_limit=0.0,
-        fit_flux_continuum_fraction=0.0, limit=0.0, telluriclines=None,
-        bwidth=3.0, commentslines=None, overwrite=False,
-        verbose=0, debug=False):
+        fit_flux_continuum_fraction=0.0, bin=1, limit=0.0,
+        telluriclines=None, bwidth=3.0, commentslines=None,
+        overwrite=False, verbose=0, debug=False):
     """astro-d11: astronomical spectrum data cube continuum subtraction
     filter
 
@@ -737,7 +766,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
     if use_emissionlines:
         elines = np.loadtxt(emissionlines, comments=comments, usecols=(0))
-        print(elines)
+
         if not isinstance(dwl, float):
             msg = screxe + "<dwl> must be set to a decimal value (Angstrom)."
             raise RuntimeError(msg)
@@ -750,12 +779,25 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         vel_z *= 1e5  # km/s => cm/s
         z = np.sqrt((1.0 + vel_z / clight) / (1.0 - vel_z / clight)) - 1.0
 
+        ewidth = len(str(len(elines)))
+        ewwidth = len(str(max(elines)))
+
         if not isinstance(fit_intensity_limit, float):
             msg = screxe + "<fit_intensity_limit> must be set to a decimal v" \
                 "alue; fit_intensity_limit >= 0."
             raise RuntimeError(msg)
 
+        if fit_intensity_limit < 0.0:
+            msg = screxe + "<fit_intensity_limit> must be set to a decimal v" \
+                "alue; fit_intensity_limit >= 0."
+            raise RuntimeError(msg)
+
         if not isinstance(fit_flux_continuum_fraction, float):
+            msg = screxe + "<fit_flux_continuum_fraction> must be set to a d" \
+                "ecimal value; fit_flux_continuum_fraction >= 0."
+            raise RuntimeError(msg)
+
+        if fit_flux_continuum_fraction < 0.0:
             msg = screxe + "<fit_flux_continuum_fraction> must be set to a d" \
                 "ecimal value; fit_flux_continuum_fraction >= 0."
             raise RuntimeError(msg)
@@ -806,32 +848,32 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         log_str = [screxe + "Apply a differential emission line filter (DELF" \
                    ") on an astronomical data cube.", \
                    screxe + "The tool was run using the following options:", \
-                   screxe + "            filename = \"" + filename + \
+                   screxe + "      filename = \"" + filename + \
                    "\"", \
-                   screxe + "                   x = " + str(x), \
-                   screxe + "                   y = " + str(y), \
-                   screxe + "                 apr = " + str(apr), \
-                   screxe + "              cwidth = " + str(cwidth), \
-                   screxe + "              bwidth = " + str(bwidth), \
-                   screxe + "              offset = " + str(offset)]
+                   screxe + "             x = " + str(x), \
+                   screxe + "             y = " + str(y), \
+                   screxe + "           apr = " + str(apr), \
+                   screxe + "        cwidth = " + str(cwidth), \
+                   screxe + "        bwidth = " + str(bwidth), \
+                   screxe + "        offset = " + str(offset)]
         if use_telluriclines or use_emissionlines:
-            log_str.append(screxe + "       commentslines = \"" + \
+            log_str.append(screxe + " commentslines = \"" + \
                            comments + "\"")
         if use_emissionlines:
             log_str = [log_str, \
-                       screxe + "       emissionlines = \"" + emissionlines + \
+                       screxe + " emissionlines = \"" + emissionlines + \
                        "\"", \
-                       screxe + "                 dwl = " + str(dwl), \
-                       screxe + "               vel_z = " + str(vel_z), \
-                       screxe + " fit_intensity_limit = " + \
+                       screxe + "           dwl = " + str(dwl), \
+                       screxe + "         vel_z = " + str(vel_z), \
+                       screxe + "         fit_intensity_limit = " + \
                        str(fit_intensity_limit), \
                        screxe + " fit_flux_continuum_fraction = " + \
                        str(fit_flux_continuum_fraction), \
-                       screxe + "                 bin = " + str(bin)]
+                       screxe + "           bin = " + str(bin)]
         if use_telluriclines:
             log_str.append(screxe + \
-                           "       telluriclines = \"" + telluriclines + "\"")
-        log_str.append(screxe + "           ofilename = \"" + ofilename + "\"")
+                           " telluriclines = \"" + telluriclines + "\"")
+        log_str.append(screxe + "     ofilename = \"" + ofilename + "\"")
         for log_str_i in log_str:
             print(log_str_i)
             logging.info(log_str_i)
@@ -901,6 +943,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         bysize = ysize // bin
         if ysize % bin != 0: bysize = bysize + 1
 
+        n1width = max([len(str(xsize)), len(str(ysize))])
         nwidth = max([len(str(bxsize)), len(str(bysize))])
 
 
@@ -1001,11 +1044,11 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     # Data are not binned.
 
                     if axis_s == 1:
-                        xy_spec = data[iy, ix, :]
+                        xy_spec = data[biy, bix, :]
                     elif axis_s == 2:
-                        xy_spec = data[iy, :, ix]
+                        xy_spec = data[biy, :, bix]
                     else:
-                        xy_spec = data[:, iy, ix]
+                        xy_spec = data[:, biy, bix]
 
                 else:
 
@@ -1168,8 +1211,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                             str(bix + 1).rjust(nwidth) + ", " + \
                             str(biy + 1).rjust(nwidth) + "] / [" + \
                             str(bxsize).rjust(nwidth) + ", " + \
-                            str(bysize).rjust(nwidth) + "] :: Line fit was o" \
-                            "k: " + ok_str
+                            str(bysize).rjust(nwidth) + "] emission line " + \
+                            str(i+1).rjust(ewidth) + " (" + \
+                            str(elines[i]).rjust(ewwidth) + \
+                            ") :: Line fit was ok: " + ok_str
                         print(log_str)
                         logging.info(log_str)
                         del log_str
@@ -1185,7 +1230,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
                         if w_i__high - w_i__low > 1:
                             if bin == 1:
-                                e_mask[w_i__low : w_i__high, ix, iy] = i
+                                e_mask[w_i__low : w_i__high, bix, biy] = i
                             else:
                                 e_mask[w_i__low : w_i__high, \
                                        ix_0 : ix_1, iy_0 : iy_1] = i
@@ -1205,12 +1250,12 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         # Step through the cube on the dispersion axis and subtract scaled
         # blue and red continuum bands from the data cube bins.
 
-        nwidth = len(str(nwave))
+        wwidth = len(str(nwave))
         dwidth = len(str(dwave))
 
         for i in range(0, nwave):
 
-            log_str = screxe + "Layer " + str(i + 1).rjust(nwidth) + " / " \
+            log_str = screxe + "Layer " + str(i + 1).rjust(wwidth) + " / " \
                 + str(nwave) + " :: "
             #log_str = print(tmp.format(i + 1, width=nwidth), end="")
 
@@ -1226,26 +1271,60 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                 #==============================================================
                 #==============================================================
 
-                for ixy in range(0, xsize * ysize):
+                for ixy in range(0, bxsize * bysize):
 
-                    ix = ixy // xsize
-                    iy = ixy % xsize
+                    bix = ixy % bxsize
+                    biy = ixy // bxsize
 
-                    log_str__i = log_str + \
-                        " [" + str(ix+1) + ", " + str(iy+1) + "] :: "
+                    if bin == 1:
+
+                        ix = bix
+                        iy = biy
+
+                    else:
+
+                        if bix == bxsize - 1:
+                            ix_1 = xsize
+                            ix_0 = ix_1 - bin
+                        else:
+                            ix_0 = bix * bin
+                            ix_1 = ix_0 + bin
+
+                        if biy == bysize - 1:
+                            iy_1 = ysize
+                            iy_0 = iy_1 - bin
+                        else:
+                            iy_0 = biy * bin
+                            iy_1 = iy_0 + bin
+
+                        ix = (ix_0, ix_1)
+                        iy = (iy_0, iy_1)
+
+                    log_str__i = log_str + " Spatial bin [" + \
+                        str(bix+1).rjust(nwidth) + ", " + \
+                        str(biy+1).rjust(nwidth) + "] :: "
 
                     img = d11_filter(i, offset, dwave, spec, data,
                                      axis_s=axis_s, ix=ix, iy=iy, mask=mask,
-                                     emask=e_mask[:, ix, iy], inmsg=log_str__i,
+                                     emask=e_mask[:, bix, biy],
+                                     inmsg=log_str__i,
                                      nwidth=nwidth, dwidth=dwidth,
                                      verbose=verbose, debug=debug)
 
-                    if axis_s == 1:
-                        odata[iy, ix, i] = img
-                    elif axis_s == 2:
-                        odata[iy, i, ix] = img
+                    if bin == 1:
+                        if axis_s == 1:
+                            odata[iy, ix, i] = img
+                        elif axis_s == 2:
+                            odata[iy, i, ix] = img
+                        else:
+                            odata[i, iy, ix] = img
                     else:
-                        odata[i, iy, ix] = img
+                        if axis_s == 1:
+                            odata[iy_0 : iy_1, ix_0 : ix_1, i] = img
+                        elif axis_s == 2:
+                            odata[iy_0 : iy_1, i, ix_0 : ix_1] = img
+                        else:
+                            odata[i, iy_0 : iy_1, ix_0 : ix_1] = img
 
 
             else:
@@ -1388,7 +1467,17 @@ if __name__ == "__main__":
     else:
         vel_z = 0.0
 
-    if arbs.bin is not None:
+    if args.fit_intensity_limit is not None:
+        fit_intensity_limit = args.fit_intensity_limit
+    else:
+        fit_intensity_limit = 0.0
+
+    if args.fit_flux_continuum_fraction is not None:
+        fit_flux_continuum_fraction = args.fit_flux_continuum_fraction
+    else:
+        fit_flux_continuum_fraction = 0.0
+
+    if args.bin is not None:
         bin = args.bin
     else:
         bin = 1
@@ -1406,8 +1495,8 @@ if __name__ == "__main__":
     d11(args.filename, args.x, args.y, args.apr, args.cwidth,
         offset=offset, emissionlines=args.emissionlines,
         noemissionlines=args.noemissionlines, dwl=dwl, vel_z=vel_z,
-        fit_intensity_limit=args.fit_intensity_limit,
-        fit_flux_continuum_fraction=args.fit_flux_continuum_fraction,
+        fit_intensity_limit=fit_intensity_limit,
+        fit_flux_continuum_fraction=fit_flux_continuum_fraction,
         bin=bin, telluriclines=args.telluriclines, bwidth=bwidth,
         commentslines=args.commentslines, ofilename=args.ofilename,
         overwrite=args.overwrite, verbose=verbose, debug=args.debug)
