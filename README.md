@@ -13,7 +13,7 @@ The algorithm is first described in the paper mentioned in the Links section bel
 
 ## Method
 
-Two narrow bandpasses, a blue and a red bandpass, are offset from the current wavelength (layer) towards bluer (lower) and redder (higher) pixels, beginning at an initial offset (`offset`). The total width of the red and blue bandpasses is set using the parameter `cwidth`; either bandpass is skipped for the bluest (lowest) and reddest (highest) pixels. The initially offset bandpasses are thereafter shifted away from the layer as needed in such a way that telluric and [optionally also] emission lines are avoided. Additionally, the subtracted continuum value is normalized with a reference spectrum of a pre-selected aperture with few emission-line features, using the same bandpasses. The location and size of the reference aperture must be set using the parameters `x`, `y`, and `apr`.
+Two narrow bandpasses, a blue and a red bandpass, are offset from the current wavelength (layer) towards bluer (lower) and redder (higher) pixels, beginning at an initial offset (`offset`). The total width of the red and blue bandpasses is set using the parameter `cwidth`; either bandpass is skipped for the bluest (lowest) and reddest (highest) pixels. The initially offset bandpasses are thereafter shifted away from the layer as needed in such a way that telluric and [optionally also] emission lines are avoided. Additionally, the subtracted continuum value is normalized with a reference spectrum of a pre-selected aperture with few emission-line features, using the same bandpasses. The location and size of the reference aperture must be set using the parameters `aper_x`, `aper_y`, and `aper_s`.
 
 The reference spectrum (`rspec`) and its continuum bandpasses (`rspec_blue` and `rspec_red`) are defined with `n_blue` and `n_red` layers in the blue and red bandpasses, respectively. Likewise, the flux and continuum bandpasses of each spatial element are defined with `img`, `img_blue`, and `img_red`, respectively; using the same bandpasses as the reference spectrum! The continuum is then subtracted from the input data cube for the current layer `i` using the following equation:
 
@@ -43,7 +43,7 @@ Please Note! The fitting procedure of individual emission lines is slow. So it m
 
 ### Resulting Image
 
-The filtered image is written to a file, adding a set of header keywords that indicate waht argument values were used (`d11_x`, `d11_y`, `d11_apr`, and `d11_cwid`) for the parameters `x, y, apr, cwidth`. The output filename can be set explicitly using the parameter `ofilename`), otherwise the input filename is used with the added suffix *_d11*.
+The filtered image is written to a file, adding a set of header keywords that indicate waht argument values were used (`d11_x`, `d11_y`, `d11_s`, and `d11_cwid`) for the parameters `aper_x, aper_y, aper_s, cwidth`. The output filename can be set explicitly using the parameter `ofilename`), otherwise the input filename is used with the added suffix *_d11*.
 
 
 ## Links
