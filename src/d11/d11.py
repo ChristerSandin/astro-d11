@@ -1245,6 +1245,7 @@ def d11(filename, aper_x, aper_y, aper_s, cwidth, ofilename=None, offset=5,
             spec = np.nansum(data[y_0 : y_1, :, x_0 : x_1], axis=(0, 2))
         else:
             spec = np.nansum(data[:, y_0 : y_1, x_0 : x_1], axis=(1, 2))
+        spec /= nx * ny
 
 
         # Step through the cube on the dispersion axis and subtract scaled
