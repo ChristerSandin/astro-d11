@@ -1,4 +1,4 @@
-Copyright 2021 Leibniz-Institute for Astrophysics Potsdam
+Copyright 2021 Leibniz-Institut für Astrophysik Potsdam
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
