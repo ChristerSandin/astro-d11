@@ -860,7 +860,7 @@ def d11(filename, aper_x, aper_y, aper_s, cwidth, ofilename=None, offset=5,
             log_str.append(screxe + " commentslines = \"" + \
                            comments + "\"")
         if use_emissionlines:
-            log_str = [log_str, \
+            log_str.extend([ \
                        screxe + " emissionlines = \"" + emissionlines + \
                        "\"", \
                        screxe + "           dwl = " + str(dwl), \
@@ -869,7 +869,7 @@ def d11(filename, aper_x, aper_y, aper_s, cwidth, ofilename=None, offset=5,
                        str(fit_intensity_limit), \
                        screxe + " fit_flux_continuum_fraction = " + \
                        str(fit_flux_continuum_fraction), \
-                       screxe + "           bin = " + str(bin)]
+                       screxe + "           bin = " + str(bin)])
         if use_telluriclines:
             log_str.append(screxe + \
                            " telluriclines = \"" + telluriclines + "\"")
