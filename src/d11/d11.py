@@ -408,9 +408,9 @@ def d11_filter(i, offset, dwave, spec, data, axis_s=1, ix=None, iy=None,
     return img
 
 
-def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
-        spec=None, emissionlines=None, noemissionlines=None, dwl=1.0,
-        vel_z=0.0, fit_intensity_limit=0.0,
+def d11(filename, aper_x, aper_y, aper_s, cwidth, ofilename=None, offset=5,
+        wave=None, spec=None, emissionlines=None, noemissionlines=None,
+        dwl=1.0, vel_z=0.0, fit_intensity_limit=0.0,
         fit_flux_continuum_fraction=0.0, bin=1, limit=0.0,
         telluriclines=None, bwidth=3.0, commentslines=None,
         overwrite=False, verbose=0, debug=False):
@@ -456,7 +456,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
     with a reference spectrum of a pre-selected aperture with few
     emission-line features, using the same bandpasses. The location and
     size of the reference aperture must be set using the parameters
-    //x//, //y//, and //apr//.
+    //aper_x//, //aper_y//, and //aper_s//.
 
     The reference spectrum (/rspec/) and its continuum bandpasses
     (/rspec_blue/ and /rspec_red/) are defined with /n_blue/ and /n_red/
@@ -519,10 +519,10 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
     The filtered image is written to a file, adding a set of header
     keywords that indicate waht argument values were used (//d11_x//,
-    //d11_y//, //d11_apr//, and //d11_cwid//) for the parameters
-    //x, y, apr, cwidth//. The output filename can be set explicitly
-    using  the parameter //ofilename), otherwise the input filename is
-    used with the added suffix '_d11'.
+    //d11_y//, //d11_s//, and //d11_cwid//) for the parameters
+    //aper_x, aper_y, aper_s, cwidth//. The output filename can be set
+    explicitly using the parameter //ofilename), otherwise the input
+    filename is used with the added suffix '_d11'.
 
 
     *Links*
@@ -559,9 +559,9 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
     The program is used with the following keywords and options:
 
-    d11.py <file> x y apr cwidth [-f] [-e <file>] [-d <value>] \
-        [-z <value>] [-t <file>] [-b <value>] [-u <char>] \
-        [-o <file>] [-w] [-v <int>]
+    d11.py <file> aper_x aper_y aper_s cwidth [-f] [-e <file>] \
+        [-d <value>] [-z <value>] [-t <file>] [-b <value>] \
+        [-u <char>] [-o <file>] [-w] [-v <int>]
 
     <file>:
       The name of the data cube file. The file needs to be stored using
@@ -570,19 +570,19 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
       integer in the range 1-3), which needs to be set to either AWAV
       or WAVE.
 
-    x:
+    aper_x:
       The x-coordinate of the region that is used to create a reference
       spectrum. The value is specified in pixel units. There is no
       default as this value has to be chosen by identifying a region in
       the data cube where there is little change.
 
-    y:
+    aper_y:
       The y-coordinate of the region that is used to create a reference
       spectrum. The value is specified in pixel units. There is no
       default as this value has to be chosen by identifying a region in
       the data cube where there is little change.
 
-    apr:
+    aper_s:
       The reference spectrum region half-width. The value is specified
       in pixel units. There is no default as this value has to be chosen
       by identifying a region in the data cube where there is little
@@ -850,9 +850,9 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                    screxe + "The tool was run using the following options:", \
                    screxe + "      filename = \"" + filename + \
                    "\"", \
-                   screxe + "             x = " + str(x), \
-                   screxe + "             y = " + str(y), \
-                   screxe + "           apr = " + str(apr), \
+                   screxe + "        aper_x = " + str(aper_x), \
+                   screxe + "        aper_y = " + str(aper_y), \
+                   screxe + "        aper_s = " + str(aper_s), \
                    screxe + "        cwidth = " + str(cwidth), \
                    screxe + "        bwidth = " + str(bwidth), \
                    screxe + "        offset = " + str(offset)]
@@ -860,7 +860,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
             log_str.append(screxe + " commentslines = \"" + \
                            comments + "\"")
         if use_emissionlines:
-            log_str = [log_str, \
+            log_str.extend([ \
                        screxe + " emissionlines = \"" + emissionlines + \
                        "\"", \
                        screxe + "           dwl = " + str(dwl), \
@@ -869,7 +869,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                        str(fit_intensity_limit), \
                        screxe + " fit_flux_continuum_fraction = " + \
                        str(fit_flux_continuum_fraction), \
-                       screxe + "           bin = " + str(bin)]
+                       screxe + "           bin = " + str(bin)])
         if use_telluriclines:
             log_str.append(screxe + \
                            " telluriclines = \"" + telluriclines + "\"")
@@ -997,15 +997,15 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
 
         # Set the aperture and check that it is consistent.
 
-        x_0 = round(x - apr)
-        x_1 = round(x + apr) + 1
+        x_0 = round(aper_x - aper_s)
+        x_1 = round(aper_x + aper_s) + 1
         if x_0 < 0: x_0 = 0
         if x_1 > xsize: x_1 = xsize
         nx = 0
         if x_1 > x_0: nx = x_1 - x_0
 
-        y_0 = round(y - apr)
-        y_1 = round(y + apr) + 1
+        y_0 = round(aper_y - aper_s)
+        y_1 = round(aper_y + aper_s) + 1
         if y_0 > 0: y_0 = 0
         if y_1 > ysize: y_1 = ysize
         ny = 0
@@ -1085,7 +1085,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                 count = np.argwhere(~np.isnan(xy_spec)).size/2
 
                 if count == 0:
-                    log_str = screxe + "Spectrum bin [" + \
+                    log_str = screxe + "Spatial bin [" + \
                         str(bix + 1).rjust(nwidth) + ", " + \
                         str(biy + 1).rjust(nwidth) + "] / [" + \
                                  str(bxsize).rjust(nwidth) + ", " + \
@@ -1167,7 +1167,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     if nan_count > 0 or count < 7:
                         log_st = "no"
                         if count >  0: log_st = "only " + str(count)
-                        log_str = screxe + "Spectrum bin [" + \
+                        log_str = screxe + "Spatial bin [" + \
                             str(bix + 1).rjust(nwidth) + ", " + \
                             str(biy + 1).rjust(nwidth) + "] / [" + \
                             str(bxsize).rjust(nwidth) + ", " + \
@@ -1207,7 +1207,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
                     if verbose >=3:
                         ok_str = "yes, intensity = " + str(ok_intensity) \
                             if ok_fit else "no"
-                        log_str = screxe + "Spectrum bin [" + \
+                        log_str = screxe + "Spatial bin [" + \
                             str(bix + 1).rjust(nwidth) + ", " + \
                             str(biy + 1).rjust(nwidth) + "] / [" + \
                             str(bxsize).rjust(nwidth) + ", " + \
@@ -1245,6 +1245,7 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
             spec = np.nansum(data[y_0 : y_1, :, x_0 : x_1], axis=(0, 2))
         else:
             spec = np.nansum(data[:, y_0 : y_1, x_0 : x_1], axis=(1, 2))
+        spec /= nx * ny
 
 
         # Step through the cube on the dispersion axis and subtract scaled
@@ -1359,10 +1360,12 @@ def d11(filename, x, y, apr, cwidth, ofilename=None, offset=5, wave=None,
         hdr1["history"] = "d11: data cube processed with d11 to subtract the" \
             " continuum"
         hdr1["history"] = "d11: time of processing: " + time.asctime()
-        hdr1["d11_x"] = (x, "d11: ap. center x coord. for continuum template")
-        hdr1["d11_y"] = (y, "d11: ap. center y coord. for continuum template")
-        hdr1["d11_apr"] = (apr, "d11: aperture radius to sample the continuu" \
-                            "m")
+        hdr1["d11_x"] = (aper_x, "d11: ap. center x coord. for continuum tem" \
+                         "plate")
+        hdr1["d11_y"] = (aper_y, "d11: ap. center y coord. for continuum tem" \
+                         "plate")
+        hdr1["d11_s"] = (aper_s, "d11: aperture radius to sample the continu" \
+                         "um")
         hdr1["d11_cwid"] = (cwidth, "d11: bandwidth of offband continuum [An" \
                             "gstrom]")
 
@@ -1393,12 +1396,12 @@ if __name__ == "__main__":
 
     parser.add_argument("filename", help="The name of a FITS file with a dat" \
                         "a cube; with two spatial and one spectral dimension.")
-    parser.add_argument("x", help="Reference region aperture x coordinate " \
-                        "[pixel].", type=float)
-    parser.add_argument("y", help="Reference region aperture y coordinate " \
-                        "[pixel].", type=float)
-    parser.add_argument("apr", help="Reference region aperture size [pixel].",
-                        type=float)
+    parser.add_argument("aper_x", help="Reference region aperture x coordina" \
+                        "te [pixel].", type=float)
+    parser.add_argument("aper_y", help="Reference region aperture y coordina" \
+                        "te [pixel].", type=float)
+    parser.add_argument("aper_s", help="Reference region aperture size [pixe" \
+                        "l].", type=float)
     parser.add_argument("cwidth", help="Total (blue + red) continuum bandwid" \
                         "th for subtraction [Angstrom].", type=float)
 
@@ -1492,7 +1495,7 @@ if __name__ == "__main__":
     else:
         verbose = 0
 
-    d11(args.filename, args.x, args.y, args.apr, args.cwidth,
+    d11(args.filename, args.aper_x, args.aper_y, args.aper_s, args.cwidth,
         offset=offset, emissionlines=args.emissionlines,
         noemissionlines=args.noemissionlines, dwl=dwl, vel_z=vel_z,
         fit_intensity_limit=fit_intensity_limit,

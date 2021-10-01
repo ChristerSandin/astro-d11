@@ -13,7 +13,7 @@ The algorithm is first described in the paper mentioned in the Links section bel
 
 ## Method
 
-Two narrow bandpasses, a blue and a red bandpass, are offset from the current wavelength (layer) towards bluer (lower) and redder (higher) pixels, beginning at an initial offset (`offset`). The total width of the red and blue bandpasses is set using the parameter `cwidth`; either bandpass is skipped for the bluest (lowest) and reddest (highest) pixels. The initially offset bandpasses are thereafter shifted away from the layer as needed in such a way that telluric and [optionally also] emission lines are avoided. Additionally, the subtracted continuum value is normalized with a reference spectrum of a pre-selected aperture with few emission-line features, using the same bandpasses. The location and size of the reference aperture must be set using the parameters `x`, `y`, and `apr`.
+Two narrow bandpasses, a blue and a red bandpass, are offset from the current wavelength (layer) towards bluer (lower) and redder (higher) pixels, beginning at an initial offset (`offset`). The total width of the red and blue bandpasses is set using the parameter `cwidth`; either bandpass is skipped for the bluest (lowest) and reddest (highest) pixels. The initially offset bandpasses are thereafter shifted away from the layer as needed in such a way that telluric and [optionally also] emission lines are avoided. Additionally, the subtracted continuum value is normalized with a reference spectrum of a pre-selected aperture with few emission-line features, using the same bandpasses. The location and size of the reference aperture must be set using the parameters `aper_x`, `aper_y`, and `aper_s`.
 
 The reference spectrum (`rspec`) and its continuum bandpasses (`rspec_blue` and `rspec_red`) are defined with `n_blue` and `n_red` layers in the blue and red bandpasses, respectively. Likewise, the flux and continuum bandpasses of each spatial element are defined with `img`, `img_blue`, and `img_red`, respectively; using the same bandpasses as the reference spectrum! The continuum is then subtracted from the input data cube for the current layer `i` using the following equation:
 
@@ -43,12 +43,14 @@ Please Note! The fitting procedure of individual emission lines is slow. So it m
 
 ### Resulting Image
 
-The filtered image is written to a file, adding a set of header keywords that indicate waht argument values were used (`d11_x`, `d11_y`, `d11_apr`, and `d11_cwid`) for the parameters `x, y, apr, cwidth`. The output filename can be set explicitly using the parameter `ofilename`), otherwise the input filename is used with the added suffix *_d11*.
+The filtered image is written to a file, adding a set of header keywords that indicate waht argument values were used (`d11_x`, `d11_y`, `d11_s`, and `d11_cwid`) for the parameters `aper_x, aper_y, aper_s, cwidth`. The output filename can be set explicitly using the parameter `ofilename`), otherwise the input filename is used with the added suffix *_d11*.
 
 
 ## Links
 
 The filter is described in the paper _Toward Precision Cosmology with Improved PNLF Distances Using VLT-MUSE I. Methodology and Tests_, Martin M. Roth, George H. Jacoby, Robin Ciardullo, Brian D. Davis, Owen Chase, and Peter M. Weilbacher 2021, [The Astrophysical Journal](https://iopscience.iop.org/journal/0004-637X), [916, 21, 44 pp. (PDF)](https://ui.adsabs.harvard.edu/link_gateway/2021ApJ...916...21R/PUB_PDF) [[*ApJ* abstract page](https://www.doi.org/10.3847/1538-4357/ac02ca), [NASA ADS](https://ui.adsabs.harvard.edu/abs/2021ApJ...916...21R/abstract)].
+
+The fitting routine __mpfit__ works with Python 3 and is a part of the __astrolibpy__ project [GitHub/astrolibpy/mpfit](https://github.com/segasai/astrolibpy).
 
 This tool is also available in the integral-field spectroscopy data-reduction package __p3d__, which is available at https://p3d.sourceforge.io, where the tool is named __p3d_d11__. While __p3d__ is written using the Interactive Data Language (IDL), it can be used without a license using the IDL Virtual Machine.
 
@@ -60,4 +62,6 @@ The code is available in the [python package index](https://pypi.org/project/ast
 pip install astro-d11
 ```
 
-The tool __mpfit.py__ for Python 3 needs to be retrieved separately from [GitHub/astrolibpy/mpfit](https://github.com/segasai/astrolibpy/blob/master/mpfit/mpfit.py).
+## License
+
+Astro-d11 is licensed with the BSD-3-Clause License, while the routine `mpfit.py` is included under a permissive comment in the source code.
