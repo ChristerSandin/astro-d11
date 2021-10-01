@@ -50,6 +50,8 @@ The filtered image is written to a file, adding a set of header keywords that in
 
 The filter is described in the paper _Toward Precision Cosmology with Improved PNLF Distances Using VLT-MUSE I. Methodology and Tests_, Martin M. Roth, George H. Jacoby, Robin Ciardullo, Brian D. Davis, Owen Chase, and Peter M. Weilbacher 2021, [The Astrophysical Journal](https://iopscience.iop.org/journal/0004-637X), [916, 21, 44 pp. (PDF)](https://ui.adsabs.harvard.edu/link_gateway/2021ApJ...916...21R/PUB_PDF) [[*ApJ* abstract page](https://www.doi.org/10.3847/1538-4357/ac02ca), [NASA ADS](https://ui.adsabs.harvard.edu/abs/2021ApJ...916...21R/abstract)].
 
+The fitting routine __mpfit__ works with Python 3 and is a part of the __astrolibpy__ project [GitHub/astrolibpy/mpfit](https://github.com/segasai/astrolibpy).
+
 This tool is also available in the integral-field spectroscopy data-reduction package __p3d__, which is available at https://p3d.sourceforge.io, where the tool is named __p3d_d11__. While __p3d__ is written using the Interactive Data Language (IDL), it can be used without a license using the IDL Virtual Machine.
 
 
@@ -60,4 +62,6 @@ The code is available in the [python package index](https://pypi.org/project/ast
 pip install astro-d11
 ```
 
-The tool __mpfit.py__ for Python 3 needs to be retrieved separately from [GitHub/astrolibpy/mpfit](https://github.com/segasai/astrolibpy/blob/master/mpfit/mpfit.py).
+## License
+
+Astro-d11 is licensed with the BSD-3-Clause License, while the routine `mpfit.py` is included under a permissive comment in the source code.
